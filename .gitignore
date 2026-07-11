@@ -1,0 +1,31 @@
+# Datos generados — no versionar
+*.json
+*.csv
+*.CSV
+*.xlsx
+*.XLSX
+*.log
+*.txt
+
+# Archivos temporales de debug
+_*.py
+chk*.txt
+*_out.txt
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Backups
+backup_*/
+
+# JS vendored (descargados)
+chart.min.js
+datalabels.min.js
+tailwind*.css
+
+# Otros artefactos
+server.log
+servidor_log.txt
+install_dbdtypes.log
