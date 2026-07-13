@@ -46,17 +46,19 @@ body { font-family: sans-serif; background:#f8fafc; }
 }
 .tbl td {
   font-size: 0.70rem; padding: 3px 7px;
-  text-align: center; border-bottom: 1px solid #e2e8f0;
+  text-align: center; border-bottom: 1px solid #edf0f3;
 }
 .tbl tr:hover td { background: #f1f5f9; }
 .v-name { text-align:left !important; max-width:200px; white-space:nowrap;
           overflow:hidden; text-overflow:ellipsis; }
-.cell-ok   { background:#d1fae5; color:#065f46; font-weight:700; }
+.cell-ok   { color:#065f46; font-weight:700; }
+.cell-bad  { color:#b91c1c; font-weight:800; }
 .col-active { box-shadow: inset 0 0 0 2px #f59e0b; font-weight:800; }
-.cell-bad  { background:#fed7aa; color:#7c2d12; font-weight:700; }
 .cell-null { color:#94a3b8; }
 .cell-obj  { background:#dbeafe; color:#1e40af; font-weight:700; }
 .cell-tot  { background:#f1f5f9; font-weight:700; }
+.delta-ok  { color:#16a34a; font-size:0.60rem; font-weight:700; display:block; line-height:1.2; }
+.delta-bad { color:#dc2626; font-size:0.60rem; font-weight:700; display:block; line-height:1.2; }
 .reg-hdr   { background:#334155; color:#e2e8f0; font-size:0.63rem;
              letter-spacing:.05em; text-transform:uppercase; }
 .chart-wrap { position:relative; height:420px; }
@@ -180,28 +182,6 @@ select { border:1px solid #cbd5e1; border-radius:6px;
 </div>
 
 <div id="tables" class="space-y-8"></div>
-
-<div class="mt-8 mb-4 rounded-xl overflow-hidden border border-slate-700" style="font-family:monospace;font-size:0.78rem;">
-  <table style="width:100%;border-collapse:collapse;">
-    <thead>
-      <tr style="background:#1e293b;color:#f8fafc;">
-        <th style="padding:10px 16px;text-align:left;font-weight:700;letter-spacing:.04em;">Componente</th>
-        <th style="padding:10px 16px;text-align:left;font-weight:700;letter-spacing:.04em;">Regla aplicada</th>
-      </tr>
-    </thead>
-    <tbody style="background:#0f172a;color:#94a3b8;">
-      <tr style="border-top:1px solid #334155;"><td style="padding:7px 16px;color:#7dd3fc;">Fecha de descarga</td><td style="padding:7px 16px;">01 Enero 2026 &rarr; 03 Julio 2026</td></tr>
-      <tr style="border-top:1px solid #334155;"><td style="padding:7px 16px;color:#7dd3fc;">TIPO_CITA</td><td style="padding:7px 16px;"><span style="color:#e2e8f0;">TRIM(UPPER(TIPO_CITA)) IN ('PROVEEDOR', 'CITA NUEVA')</span> &mdash; BQ query, generar_csv y rebuild</td></tr>
-      <tr style="border-top:1px solid #334155;"><td style="padding:7px 16px;color:#7dd3fc;">CITAS_CORRECTAS</td><td style="padding:7px 16px;"><span style="color:#e2e8f0;">=&nbsp;1</span> &mdash; solo uso correcto, en BQ query y generar_csv</td></tr>
-      <tr style="border-top:1px solid #334155;"><td style="padding:7px 16px;color:#7dd3fc;">F&oacute;rmula LOS</td><td style="padding:7px 16px;"><span style="color:#e2e8f0;">(AVG(Llegada a tr&aacute;fico) + AVG(Duraci&oacute;n de Servicio) + AVG(Salida de CD)) / 60</span></td></tr>
-      <tr style="border-top:1px solid #334155;"><td style="padding:7px 16px;color:#7dd3fc;">Tiempos negativos</td><td style="padding:7px 16px;">Se <span style="color:#86efac;font-weight:700;">conservan</span> tal cual &mdash; sin exclusi&oacute;n</td></tr>
-      <tr style="border-top:1px solid #334155;"><td style="padding:7px 16px;color:#7dd3fc;">Tiempos altos (&gt;24h)</td><td style="padding:7px 16px;">Se <span style="color:#86efac;font-weight:700;">conservan</span> tal cual &mdash; sin tope superior</td></tr>
-      <tr style="border-top:1px solid #334155;"><td style="padding:7px 16px;color:#7dd3fc;">Razones sociales</td><td style="padding:7px 16px;"><span style="color:#e2e8f0;">.upper().strip()</span> en vendor lookup &mdash; variantes de may&uacute;sculas/espacios unificadas</td></tr>
-      <tr style="border-top:1px solid #334155;"><td style="padding:7px 16px;color:#7dd3fc;">YTD</td><td style="padding:7px 16px;">Promedio ponderado por citas &mdash; Enero &rarr; Julio (1-3)</td></tr>
-      <tr style="border-top:1px solid #334155;"><td style="padding:7px 16px;color:#7dd3fc;">Perecederos excluidos de secos</td><td style="padding:7px 16px;">CDs 7498, 7502, 7466, 4996, 7454 fuera de AUTO/SAMS_LOCS</td></tr>
-    </tbody>
-  </table>
-</div>
 
 <div class="mt-2 text-center text-xs text-slate-400">
   Walmart Supply Chain &middot; Datos YMS 2026 &middot; Generado autom&#225;ticamente
@@ -582,7 +562,48 @@ function fmt(v) {
 function cellCls(val, obj) {
   if (val === null || val === undefined) return "cell-null";
   if (obj === null || obj === undefined) return "";
-  return val <= obj ? "cell-ok" : "cell-bad";
+  var diff = Math.round((val - obj) * 10) / 10;  // precision fix: 12.0001 vs 12.0 => 0.0
+  return diff <= 0 ? "cell-ok" : "cell-bad";
+}
+
+// Celda con valor + delta vs objetivo (opcion 1 ejecutiva)
+function tdDelta(val, obj, extraCls) {
+  var el = document.createElement("td");
+  if (val === null || val === undefined) {
+    el.textContent = "\u2014";
+    el.className = "cell-null" + (extraCls ? " " + extraCls : "");
+    return el;
+  }
+  if (obj === null || obj === undefined) {
+    el.textContent = fmt(val);
+    if (extraCls) el.className = extraCls;
+    return el;
+  }
+  var diff = Math.round((val - obj) * 10) / 10;
+  var ok   = diff <= 0;  // usar diff redondeado: 0.0 = dentro de objetivo
+  var sign = diff > 0 ? "+" : "";
+  var arrow = diff > 0 ? "\u25b2" : "\u25bc";  // ▲ / ▼
+
+  if (ok) {
+    // Dentro de objetivo: solo el numero, sin marcador
+    el.textContent = fmt(val);
+    el.className = "cell-ok" + (extraCls ? " " + extraCls : "");
+    return el;
+  }
+
+  // Fuera de objetivo: numero + delta en rojo
+  var spanVal = document.createElement("span");
+  spanVal.textContent = fmt(val);
+  spanVal.style.display = "block";
+
+  var spanDelta = document.createElement("span");
+  spanDelta.textContent = arrow + " " + sign + diff.toFixed(1);
+  spanDelta.className = "delta-bad";
+
+  el.appendChild(spanVal);
+  el.appendChild(spanDelta);
+  el.className = "cell-bad" + (extraCls ? " " + extraCls : "");
+  return el;
 }
 
 function flatLocs(regions) {
@@ -959,15 +980,15 @@ function paintChart(canvasId, chartData, objData, order, loc, period, existing, 
       datasets: [
         {type:"bar",  label:"Llegada",  data:lS, backgroundColor:"#9ca3af", stack:"stk", order:2,
          yAxisID:"y",
-         datalabels:{display:true, color:"#374151", font:{size:8},
+         datalabels:{display:true, color:"#374151", font:{size:13,weight:"bold"},
            formatter:function(v){return v>0.05?parseFloat(v).toFixed(1):"";}, anchor:"center", align:"center"}},
         {type:"bar",  label:"Recibo",   data:rS, backgroundColor:"#f97316", stack:"stk", order:2,
          yAxisID:"y",
-         datalabels:{display:true, color:"#fff", font:{size:9,weight:"bold"},
+         datalabels:{display:true, color:"#fff", font:{size:13,weight:"bold"},
            formatter:function(v){return v>0.05?parseFloat(v).toFixed(1):"";}, anchor:"center", align:"center"}},
         {type:"bar",  label:"Salida CD",data:sS, backgroundColor:"#fbbf24", stack:"stk", order:2,
          yAxisID:"y",
-         datalabels:{display:true, color:"#78350f", font:{size:8,weight:"bold"},
+         datalabels:{display:true, color:"#78350f", font:{size:13,weight:"bold"},
            formatter:function(v){return v>0.05?parseFloat(v).toFixed(1):"";}, anchor:"center", align:"center"}},
         {type:"line", label:"Total",    data:tS, borderColor:"#111827", backgroundColor:"#111827",
          pointRadius:0, borderWidth:1, tension:0, fill:false, order:1,
@@ -975,13 +996,13 @@ function paintChart(canvasId, chartData, objData, order, loc, period, existing, 
          datalabels:{display:true, color:"#fff",
            backgroundColor:"#111827", borderRadius:3,
            padding:{top:2,bottom:2,left:4,right:4},
-           font:{size:8,weight:"bold"},
+           font:{size:13,weight:"bold"},
            formatter:function(v){return v!=null?parseFloat(v).toFixed(1):"";},
            anchor:"end", align:"top", offset:4}},
         {type:"line", label:"Objetivo", data:oS, borderColor:"#2563eb", backgroundColor:"transparent",
          pointRadius:0, borderWidth:1, tension:0, fill:false, order:1,
          yAxisID:"y2",
-         datalabels:{display:true, color:"#2563eb", font:{size:9,weight:"bold"},
+         datalabels:{display:true, color:"#2563eb", font:{size:13,weight:"bold"},
            formatter:function(v){return v!=null?parseFloat(v).toFixed(1):"";},
            anchor:"end",
            align:function(ctx){
@@ -1000,8 +1021,8 @@ function paintChart(canvasId, chartData, objData, order, loc, period, existing, 
         tooltip: {mode:"index", intersect:false}
       },
       scales: {
-        x:  {stacked:true, ticks:{font:{size:9}}},
-        y:  {stacked:true, beginAtZero:true, min:0, max:yMax,
+        x:  {stacked:true, ticks:{font:{size:9}}, grid:{display:false}},
+        y:  {stacked:true, beginAtZero:true, min:0, max:yMax, grid:{display:false},
              afterBuildTicks:function(axis){
                var t=[];
                for(var i=0;i<=axis.max;i++) t.push({value:i});
@@ -1083,53 +1104,153 @@ function buildTable(title, data, objData, order, regions, loc, period, hasObj, o
   var tbody = document.createElement("tbody");
   tbl.appendChild(thead); tbl.appendChild(tbody);
 
-  // ── SIEMPRE: meses como columnas ──
+  var isAll   = (loc === "__all__") && (!filtLocs || filtLocs.length === 0);
+  var allLocs  = flatLocs(regions);
   var activePeriodIdx = PERIODS.indexOf(period);
-  var trH = document.createElement("tr");
-  trH.appendChild(th("Proveedores TOP", 1, 1, "v-name text-left", "#1e3a8a"));
-  trH.appendChild(th("Objetivo", 1, 1, "", "#1e3a8a"));
-  for (var pi = 0; pi < PERIODS.length; pi++) {
-    var bg = PER_BG[PERIODS[pi]] || "#1d4ed8";
-    var thEl = th(PER_LBL[PERIODS[pi]], 1, 1, "", bg);
-    if (pi === activePeriodIdx) thEl.style.cssText += "outline:3px solid #f59e0b; outline-offset:-2px;";
-    trH.appendChild(thEl);
-  }
-  thead.appendChild(trH);
 
-  for (var vi = 0; vi < order.length; vi++) {
-    var v = order[vi];
-    var vd = data[v]; if (!vd) continue;
-    var objL = getObjVal(objData, v, filtLocs, loc);
-    var anyData = false;
-    for (var pi = 0; pi < PERIODS.length; pi++) {
-      if (getVal(data, v, PERIODS[pi], loc, filtLocs) != null) { anyData = true; break; }
-    }
-    if (!anyData) continue;
-    var row = document.createElement("tr");
-    var tdN = td(v, "v-name"); tdN.title = v; row.appendChild(tdN);
-    row.appendChild(td(fmt(objL), "cell-obj"));
-    for (var pi = 0; pi < PERIODS.length; pi++) {
-      var val = getVal(data, v, PERIODS[pi], loc, filtLocs);
-      var cls = (hasObj ? cellCls(val, objL) : (val === null ? "cell-null" : ""));
-      if (pi === activePeriodIdx) cls += " col-active";
-      row.appendChild(td(fmt(val), cls));
-    }
-    tbody.appendChild(row);
-  }
+  if (isAll) {
+    // ── VISTA COMPLETA: Objetivos | Mes1 | Mes2 ... cada uno con sus CDs ──
+    var secCols = allLocs.length + 1; // CDs + columna 2026
+    var blocks  = PERIODS.length + 1; // bloque obj + un bloque por periodo
 
-  // Fila total
-  var totRow = document.createElement("tr");
-  var objLT = objData && objData["__total__"]
-    ? getObjVal(objData, "__total__", filtLocs, loc)
-    : null;
-  totRow.appendChild(td("Total", "v-name cell-tot font-bold"));
-  totRow.appendChild(td(fmt(objLT), "cell-tot font-bold"));
-  for (var pi = 0; pi < PERIODS.length; pi++) {
-    var val = getVal(data, "__total__", PERIODS[pi], loc, filtLocs);
-    var clsTot = (hasObj ? cellCls(val, objLT) : "cell-tot") + (pi === activePeriodIdx ? " col-active" : "");
-    totRow.appendChild(td(fmt(val), clsTot));
+    // Fila 1 — encabezados de sección
+    var tr1 = document.createElement("tr");
+    tr1.appendChild(th("Proveedores TOP", 3, 1, "v-name text-left", "#1e3a8a"));
+    tr1.appendChild(th("Objetivos LOS 2026 por Cedis", 1, secCols, "", "#1e3a8a"));
+    for (var pi = 0; pi < PERIODS.length; pi++) {
+      var bg = PER_BG[PERIODS[pi]] || "#1d4ed8";
+      var thEl = th(PER_LBL[PERIODS[pi]], 1, secCols, "", bg);
+      if (pi === activePeriodIdx) thEl.style.cssText += "outline:3px solid #f59e0b; outline-offset:-2px;";
+      tr1.appendChild(thEl);
+    }
+    thead.appendChild(tr1);
+
+    // Fila 2 — sub-encabezados de región
+    var tr2 = document.createElement("tr");
+    for (var bi = 0; bi < blocks; bi++) {
+      for (var ri = 0; ri < regions.length; ri++) {
+        var rbg = REG_BG[regions[ri].n] || "#334155";
+        tr2.appendChild(th(regions[ri].n, 1, regions[ri].l.length, "reg-hdr", rbg));
+      }
+      tr2.appendChild(th("2026", 1, 1, "", "#b45309"));
+    }
+    thead.appendChild(tr2);
+
+    // Fila 3 — códigos de CD
+    var tr3 = document.createElement("tr");
+    for (var bi = 0; bi < blocks; bi++) {
+      for (var li = 0; li < allLocs.length; li++) {
+        tr3.appendChild(th(allLocs[li], 1, 1, "", "#3b82f6"));
+      }
+      tr3.appendChild(th("Prom", 1, 1, "", "#d97706"));
+    }
+    thead.appendChild(tr3);
+
+    // Filas de proveedores
+    for (var vi = 0; vi < order.length; vi++) {
+      var v = order[vi];
+      var vd = data[v]; if (!vd) continue;
+      var ov = (objData && objData[v]) ? objData[v] : null;
+      var row = document.createElement("tr");
+      var tdN = td(v, "v-name"); tdN.title = v; row.appendChild(tdN);
+      // Bloque objetivos
+      for (var li = 0; li < allLocs.length; li++) {
+        row.appendChild(td(fmt(ov ? ov[allLocs[li]] : null), "cell-obj"));
+      }
+      row.appendChild(td(fmt(ov ? (ov["2026"] !== undefined ? ov["2026"] : null) : null), "cell-obj"));
+      // Bloques por periodo
+      for (var pi = 0; pi < PERIODS.length; pi++) {
+        var pp = PERIODS[pi];
+        var pd = vd[pp] || {};
+        var actCls = (pi === activePeriodIdx) ? " col-active" : "";
+        for (var li = 0; li < allLocs.length; li++) {
+          var lc  = allLocs[li];
+          var val = (pd[lc] !== undefined) ? pd[lc] : null;
+          var objL = ov ? (ov[lc] !== undefined ? ov[lc] : null) : null;
+          row.appendChild(td(fmt(val), (hasObj ? cellCls(val, objL) : (val===null?"cell-null":"")) + actCls));
+        }
+        var val26 = (pd["2026"] !== undefined) ? pd["2026"] : null;
+        var obj26 = ov ? (ov["2026"] !== undefined ? ov["2026"] : null) : null;
+        row.appendChild(td(fmt(val26), (hasObj ? cellCls(val26, obj26) : (val26===null?"cell-null":"")) + actCls));
+      }
+      tbody.appendChild(row);
+    }
+
+    // Fila Total
+    var totRow = document.createElement("tr");
+    totRow.appendChild(td("Total", "v-name cell-tot font-bold"));
+    var objTot = (objData && objData["__total__"]) ? objData["__total__"] : null;
+    for (var li = 0; li < allLocs.length; li++) {
+      totRow.appendChild(td(fmt(objTot ? objTot[allLocs[li]] : null), "cell-tot font-bold"));
+    }
+    totRow.appendChild(td(fmt(objTot ? (objTot["2026"] !== undefined ? objTot["2026"] : null) : null), "cell-tot font-bold"));
+    var totData = data["__total__"] || {};
+    for (var pi = 0; pi < PERIODS.length; pi++) {
+      var pp = PERIODS[pi];
+      var pd = totData[pp] || {};
+      var actCls = (pi === activePeriodIdx) ? " col-active" : "";
+      for (var li = 0; li < allLocs.length; li++) {
+        var lc  = allLocs[li];
+        var val = (pd[lc] !== undefined) ? pd[lc] : null;
+        var objL = objTot ? (objTot[lc] !== undefined ? objTot[lc] : null) : null;
+        if (hasObj) { totRow.appendChild(tdDelta(val, objL, ("cell-tot" + actCls).trim())); }
+        else { totRow.appendChild(td(fmt(val), ("cell-tot" + actCls).trim())); }
+      }
+      var val26 = (pd["2026"] !== undefined) ? pd["2026"] : null;
+      var obj26 = objTot ? (objTot["2026"] !== undefined ? objTot["2026"] : null) : null;
+      if (hasObj) { totRow.appendChild(tdDelta(val26, obj26, ("cell-tot" + actCls).trim())); }
+      else { totRow.appendChild(td(fmt(val26), ("cell-tot" + actCls).trim())); }
+    }
+    tbody.appendChild(totRow);
+
+  } else {
+    // ── VISTA SIMPLE: meses como columnas (loc específica o filtro CD) ──
+    var trH = document.createElement("tr");
+    trH.appendChild(th("Proveedores TOP", 1, 1, "v-name text-left", "#1e3a8a"));
+    trH.appendChild(th("Objetivo", 1, 1, "", "#1e3a8a"));
+    for (var pi = 0; pi < PERIODS.length; pi++) {
+      var bg = PER_BG[PERIODS[pi]] || "#1d4ed8";
+      var thEl = th(PER_LBL[PERIODS[pi]], 1, 1, "", bg);
+      if (pi === activePeriodIdx) thEl.style.cssText += "outline:3px solid #f59e0b; outline-offset:-2px;";
+      trH.appendChild(thEl);
+    }
+    thead.appendChild(trH);
+
+    for (var vi = 0; vi < order.length; vi++) {
+      var v = order[vi];
+      var vd = data[v]; if (!vd) continue;
+      var objL = getObjVal(objData, v, filtLocs, loc);
+      var anyData = false;
+      for (var pi = 0; pi < PERIODS.length; pi++) {
+        if (getVal(data, v, PERIODS[pi], loc, filtLocs) != null) { anyData = true; break; }
+      }
+      if (!anyData) continue;
+      var row = document.createElement("tr");
+      var tdN = td(v, "v-name"); tdN.title = v; row.appendChild(tdN);
+      row.appendChild(td(fmt(objL), "cell-obj"));
+      for (var pi = 0; pi < PERIODS.length; pi++) {
+        var val = getVal(data, v, PERIODS[pi], loc, filtLocs);
+        var cls = (hasObj ? cellCls(val, objL) : (val === null ? "cell-null" : ""));
+        if (pi === activePeriodIdx) cls += " col-active";
+        row.appendChild(td(fmt(val), cls.trim()));
+      }
+      tbody.appendChild(row);
+    }
+
+    // Fila total
+    var totRow = document.createElement("tr");
+    var objLT = objData && objData["__total__"]
+      ? getObjVal(objData, "__total__", filtLocs, loc)
+      : null;
+    totRow.appendChild(td("Total", "v-name cell-tot font-bold"));
+    totRow.appendChild(td(fmt(objLT), "cell-tot font-bold"));
+    for (var pi = 0; pi < PERIODS.length; pi++) {
+      var val    = getVal(data, "__total__", PERIODS[pi], loc, filtLocs);
+      var clsTot = (hasObj ? cellCls(val, objLT) + " cell-tot" : "cell-tot") + (pi === activePeriodIdx ? " col-active" : "");
+      totRow.appendChild(td(fmt(val), clsTot.trim()));
+    }
+    tbody.appendChild(totRow);
   }
-  tbody.appendChild(totRow);
 
   return wrap;
 }
