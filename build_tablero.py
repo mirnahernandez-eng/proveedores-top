@@ -51,9 +51,9 @@ body { font-family: sans-serif; background:#f8fafc; }
 .tbl tr:hover td { background: #f1f5f9; }
 .v-name { text-align:left !important; max-width:200px; white-space:nowrap;
           overflow:hidden; text-overflow:ellipsis; }
-.cell-ok   { color:#065f46; font-weight:700; }
+.cell-ok   { color:#16a34a; font-weight:700; }
 .cell-bad  { color:#b91c1c; font-weight:800; }
-.col-active { box-shadow: inset 0 0 0 2px #f59e0b; font-weight:800; }
+.col-active { font-weight:800; }
 .cell-null { color:#94a3b8; }
 .cell-obj  { background:#dbeafe; color:#1e40af; font-weight:700; }
 .cell-tot  { background:#f1f5f9; font-weight:700; }
@@ -88,11 +88,7 @@ select { border:1px solid #cbd5e1; border-radius:6px;
 <div id="updateBar" class="flex flex-wrap items-center gap-3 mb-4 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 text-sm">
   <span class="font-semibold text-blue-700">Actualizar datos:</span>
   <div class="flex items-center gap-1">
-    <label class="text-slate-600 text-xs">Inicio:</label>
-    <input type="date" id="fIni" class="border border-slate-300 rounded px-2 py-1 text-xs" value="2026-01-01">
-  </div>
-  <div class="flex items-center gap-1">
-    <label class="text-slate-600 text-xs">Fin:</label>
+    <label class="text-slate-600 text-xs">Actualizar hasta:</label>
     <input type="date" id="fFin" class="border border-slate-300 rounded px-2 py-1 text-xs">
   </div>
   <button onclick="lanzarActualizacion()" id="btnUpdate"
@@ -566,7 +562,7 @@ function cellCls(val, obj) {
   return diff <= 0 ? "cell-ok" : "cell-bad";
 }
 
-// Celda con valor + delta vs objetivo (opcion 1 ejecutiva)
+// Celda Total: solo color, sin marcadores ni delta
 function tdDelta(val, obj, extraCls) {
   var el = document.createElement("td");
   if (val === null || val === undefined) {
@@ -574,35 +570,14 @@ function tdDelta(val, obj, extraCls) {
     el.className = "cell-null" + (extraCls ? " " + extraCls : "");
     return el;
   }
+  el.textContent = fmt(val);
   if (obj === null || obj === undefined) {
-    el.textContent = fmt(val);
     if (extraCls) el.className = extraCls;
     return el;
   }
   var diff = Math.round((val - obj) * 10) / 10;
-  var ok   = diff <= 0;  // usar diff redondeado: 0.0 = dentro de objetivo
-  var sign = diff > 0 ? "+" : "";
-  var arrow = diff > 0 ? "\u25b2" : "\u25bc";  // ▲ / ▼
-
-  if (ok) {
-    // Dentro de objetivo: solo el numero, sin marcador
-    el.textContent = fmt(val);
-    el.className = "cell-ok" + (extraCls ? " " + extraCls : "");
-    return el;
-  }
-
-  // Fuera de objetivo: numero + delta en rojo
-  var spanVal = document.createElement("span");
-  spanVal.textContent = fmt(val);
-  spanVal.style.display = "block";
-
-  var spanDelta = document.createElement("span");
-  spanDelta.textContent = arrow + " " + sign + diff.toFixed(1);
-  spanDelta.className = "delta-bad";
-
-  el.appendChild(spanVal);
-  el.appendChild(spanDelta);
-  el.className = "cell-bad" + (extraCls ? " " + extraCls : "");
+  var colorCls = diff <= 0 ? "cell-ok" : "cell-bad";
+  el.className = colorCls + (extraCls ? " " + extraCls : "");
   return el;
 }
 
@@ -803,9 +778,11 @@ function resolveViewBundle(loc, activePeriod, useSW, swPer) {
       _swChart = gSelSW.length > 1 ? mergeSWChartData(SW_DATA.auto, gSelSW) : SW_DATA.auto;
       _swTbl   = gSelSW.length > 1 ? mergeSWTblData(SW_DATA.tbl_auto, gSelSW) : SW_DATA.tbl_auto;
     } else {
-      // all, auto_bae, auto_sams, bae_sams -> usar combinado auto_bae
-      _swChart = gSelSW.length > 1 ? mergeSWChartData(SW_DATA.auto_bae, gSelSW) : SW_DATA.auto_bae;
-      _swTbl   = gSelSW.length > 1 ? mergeSWTblData(SW_DATA.tbl_auto_bae, gSelSW) : SW_DATA.tbl_auto_bae;
+      // all, auto_bae, auto_sams, bae_sams -> auto_bae si existe, sino auto
+      var _srcC = SW_DATA.auto_bae || SW_DATA.auto;
+      var _srcT = SW_DATA.tbl_auto_bae || SW_DATA.tbl_auto;
+      _swChart = gSelSW.length > 1 ? mergeSWChartData(_srcC, gSelSW) : _srcC;
+      _swTbl   = gSelSW.length > 1 ? mergeSWTblData(_srcT, gSelSW) : _srcT;
     }
   }
   var swAutoChart = _swChart || null;
@@ -1008,7 +985,7 @@ function paintChart(canvasId, chartData, objData, order, loc, period, existing, 
            align:function(ctx){
              var tot=ctx.chart.data.datasets[3].data[ctx.dataIndex];
              var obj=ctx.dataset.data[ctx.dataIndex];
-             return (tot!=null&&obj!=null&&Math.abs(tot-obj)<2)?"right":"top";
+             return (tot!=null&&obj!=null&&Math.abs(tot-obj)<3)?"right":"top";
            },
            offset:4}}
       ]
@@ -1120,7 +1097,6 @@ function buildTable(title, data, objData, order, regions, loc, period, hasObj, o
     for (var pi = 0; pi < PERIODS.length; pi++) {
       var bg = PER_BG[PERIODS[pi]] || "#1d4ed8";
       var thEl = th(PER_LBL[PERIODS[pi]], 1, secCols, "", bg);
-      if (pi === activePeriodIdx) thEl.style.cssText += "outline:3px solid #f59e0b; outline-offset:-2px;";
       tr1.appendChild(thEl);
     }
     thead.appendChild(tr1);
@@ -1211,7 +1187,6 @@ function buildTable(title, data, objData, order, regions, loc, period, hasObj, o
     for (var pi = 0; pi < PERIODS.length; pi++) {
       var bg = PER_BG[PERIODS[pi]] || "#1d4ed8";
       var thEl = th(PER_LBL[PERIODS[pi]], 1, 1, "", bg);
-      if (pi === activePeriodIdx) thEl.style.cssText += "outline:3px solid #f59e0b; outline-offset:-2px;";
       trH.appendChild(thEl);
     }
     thead.appendChild(trH);
@@ -1275,10 +1250,9 @@ function td(text, cls) {
 // ── Panel Actualizar ─────────────────────────────────────────────────────
 var _pollTimer = null;
 function lanzarActualizacion() {
-  var fi = document.getElementById('fIni').value;
   var ff = document.getElementById('fFin').value;
-  if (!fi || !ff) { alert('Selecciona fecha inicio y fin'); return; }
-  if (fi > ff)    { alert('La fecha inicio debe ser menor o igual a la fecha fin'); return; }
+  if (!ff) { alert('Selecciona la fecha hasta la que quieres actualizar'); return; }
+  var fi = '2026-01-01';
   document.getElementById('btnUpdate').disabled = true;
   document.getElementById('spinnerBox').style.display = 'inline-flex';
   document.getElementById('updateBar-progress').style.display = 'block';
@@ -1317,6 +1291,8 @@ function mostrarEstado(e) {
 }
 // Fecha fin default = hoy
 document.getElementById('fFin').value = new Date().toISOString().slice(0,10);
+// Máximo = hoy (no permitir fechas futuras)
+document.getElementById('fFin').max = new Date().toISOString().slice(0,10);
 
 try { Chart.register(ChartDataLabels); } catch(e) { /* datalabels optional */ }
 fetch('sw_data.json').then(function(r){return r.json();}).then(function(d){
@@ -1328,13 +1304,18 @@ fetch('sw_data.json').then(function(r){return r.json();}).then(function(d){
   clear.onclick=function(e){e.stopPropagation();gSelSW=[];syncSwPanel();renderAll();};
   panel.appendChild(clear);
   d.sw_list.forEach(function(sw){
-    var key='SW'+sw; var mes=d.sw_mes_map[key]||'';
+    var key='SW'+sw;
+    var mes=d.sw_mes_map[key]||'';
+    var dateInfo=(d.sw_dates&&d.sw_dates[key])||null;
+    var sublbl=dateInfo?dateInfo.label:mes;
+    var fullLbl='SW'+sw+' \u00b7 '+sublbl;
     // Registra label y color dinamicamente para buildTable
-    PER_LBL[key] = 'SW '+sw+' \u2014 '+mes;
+    PER_LBL[key] = fullLbl;
     PER_BG[key]  = '#6d28d9';
     var item=document.createElement('div'); item.className='ms-item'; item.dataset.val=key;
     var cb=document.createElement('input'); cb.type='checkbox'; cb.checked=false;
-    var sp=document.createElement('span'); sp.textContent='SW '+sw+' \u2014 '+mes;
+    var sp=document.createElement('span');
+    sp.innerHTML='<b>SW'+sw+'</b> <span style="color:#64748b;font-size:.85em">· '+sublbl+'</span>';
     item.appendChild(cb); item.appendChild(sp);
     item.addEventListener('click',function(e){e.stopPropagation();toggleSW(key);});
     panel.appendChild(item);

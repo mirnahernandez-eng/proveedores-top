@@ -5,6 +5,7 @@ misma estructura que dashboard_data.json pero por SW.
 """
 import json, os, re, unicodedata, sys
 import openpyxl, pandas as pd
+from sw_calendar import SW_MES_MAP, SW_DATES, sw_range_label  # fuente única de verdad
 
 BASE = r'C:\Users\mmvhern\OneDrive - Walmart Inc\Escritorio\puppy\YMS_TOP'
 
@@ -311,9 +312,16 @@ auto_bae_data     = build_chart_data_multi(['Autoservicios','BAE'], CEDIS_AUTO, 
 auto_bae_tbl_data = build_table_data_multi(['Autoservicios','BAE'], CEDIS_AUTO, vendors_by_cat['Autoservicios'])
 
 # ── Output ────────────────────────────────────────────────────────────────────
+# sw_mes_map y sw_dates vienen de sw_calendar (fuente única de verdad)
 out = {
     'sw_list':    sw_ordered,
-    'sw_mes_map': {f"SW{sw}": sw_mes.get(sw,'?') for sw in sw_ordered},
+    'sw_mes_map': {f"SW{sw}": SW_MES_MAP.get(sw, sw_mes.get(sw, '?')) for sw in sw_ordered},
+    'sw_dates':   {
+        f"SW{sw}": {"inicio": SW_DATES[sw]["inicio"],
+                    "fin":    SW_DATES[sw]["fin"],
+                    "label":  sw_range_label(sw)}
+        for sw in sw_ordered if sw in SW_DATES
+    },
     'auto':       auto_data,       # solo Autoservicios (secos)
     'bae':        bae_data,        # solo BAE
     'auto_bae':   auto_bae_data,   # auto + bae combinados

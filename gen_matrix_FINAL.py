@@ -102,7 +102,10 @@ with open(CSV, encoding='utf-8-sig') as f:
         c      = int(r['TOTAL_CITAS'] or 0)
         total  = float(r['TOTAL_HRS']  or 0)
         llegada= float(r['LLEGADA']    or 0)
-        recibo = float(r['RECIBO']     or 0)
+        # RECIBO = ABRIR + CERRAR + PAPER (columnas del CSV actual)
+        recibo = (float(r.get('RECIBO') or r.get('ABRIR') or 0) +
+                  float(r.get('CERRAR') or 0) +
+                  float(r.get('PAPER')  or 0))
         salida = float(r['SALIDA']     or 0)
         raw[disp][cedis][mes]['c']    += c
         raw[disp][cedis][mes]['ws']   += total   * c

@@ -125,14 +125,7 @@ def calcular_metricas(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 # ── Agregar datos por SW ─────────────────────────────────────────────────────
-SW_MES_MAP = {
-    48:"Enero",49:"Enero",50:"Enero",51:"Enero",52:"Enero",
-    1:"Febrero",2:"Febrero",3:"Febrero",4:"Febrero",
-    5:"Marzo",6:"Marzo",7:"Marzo",8:"Marzo",9:"Marzo",
-    10:"Abril",11:"Abril",12:"Abril",13:"Abril",
-    14:"Mayo",15:"Mayo",16:"Mayo",17:"Mayo",
-    18:"Junio",19:"Junio",20:"Junio",21:"Junio",22:"Junio",
-}
+from sw_calendar import SW_MES_MAP, SW_DATES, sw_range_label  # fuente única de verdad
 
 DISPLAY_ORDER = [
     "KIMBERLY CLARK DE MEX SA B CV","ENBOTELLAD NIAGARA D MX","JUGOS DEL VALLE",
@@ -194,6 +187,7 @@ def agregar_sw(df: pd.DataFrame, kw_by_cat: dict) -> dict:
         out = {}
         for v in DISPLAY_ORDER:
             out[v] = {}
+            # Promedio por locacion
             for cedis in cedis_list:
                 out[v][cedis] = {}
                 for sw_key in [f"SW{n}" for n in sw_list_nums]:
@@ -201,6 +195,20 @@ def agregar_sw(df: pd.DataFrame, kw_by_cat: dict) -> dict:
                     if rec and rec["c"]:
                         a = avg(rec)
                         out[v][cedis][sw_key] = {"l":a["wl"],"r":a["wr"],"s":a["ws"],"t":a["wt"]}
+            # Promedio nacional '2026' — requerido por paintChart cuando loc='__all__'
+            nat = {}
+            for sw_key in [f"SW{n}" for n in sw_list_nums]:
+                wl, wr, ws, wt, cnt = 0.0, 0.0, 0.0, 0.0, 0
+                for cedis in cedis_list:
+                    rec = raw[v][cedis].get(sw_key)
+                    if rec and rec["c"]:
+                        wl += rec["wl"]; wr += rec["wr"]
+                        ws += rec["ws"]; wt += rec["wt"]
+                        cnt += rec["c"]
+                if cnt:
+                    nat[sw_key] = {"l":round(wl/cnt,2),"r":round(wr/cnt,2),
+                                   "s":round(ws/cnt,2),"t":round(wt/cnt,2)}
+            out[v]["2026"] = nat
         return out
 
     def build_tbl(cedis_list):
@@ -215,13 +223,35 @@ def agregar_sw(df: pd.DataFrame, kw_by_cat: dict) -> dict:
                         out[v][sw_key][cedis] = round(raw[v][cedis][sw_key]["wt"]/rec["c"],2)
         return out
 
+    # Filtrar sw_list a solo SWs con datos reales
+    auto_data = build_chart(AUTO_CEDIS)
+    sams_data = build_chart(SAMS_CEDIS)
+    sw_has_data = set()
+    for section in (auto_data, sams_data):
+        for vendor, cedis_map in section.items():
+            nat = cedis_map.get("2026", {})
+            for sw_key, vals in nat.items():
+                if vals and vals.get("t"):
+                    sw_has_data.add(int(sw_key[2:]))
+    sw_list_final    = [n for n in sw_list_nums if n in sw_has_data]
+    sw_mes_map_final = {f"SW{k}": v for k, v in SW_MES_MAP.items() if k in sw_has_data}
+    sw_dates_final   = {
+        f"SW{k}": {"inicio": SW_DATES[k]["inicio"], "fin": SW_DATES[k]["fin"],
+                   "label": sw_range_label(k)}
+        for k in sw_has_data if k in SW_DATES
+    }
+
+    tbl_auto = build_tbl(AUTO_CEDIS)
     return {
-        "sw_list":    sw_list_nums,
-        "sw_mes_map": sw_mes_map,
-        "auto":       build_chart(AUTO_CEDIS),
-        "sams":       build_chart(SAMS_CEDIS),
-        "tbl_auto":   build_tbl(AUTO_CEDIS),
+        "sw_list":    sw_list_final,
+        "sw_mes_map": sw_mes_map_final,
+        "sw_dates":   sw_dates_final,
+        "auto":       auto_data,
+        "sams":       sams_data,
+        "auto_bae":   auto_data,      # alias: mismos vendors, BAE es subconjunto de Auto
+        "tbl_auto":   tbl_auto,
         "tbl_sams":   build_tbl(SAMS_CEDIS),
+        "tbl_auto_bae": tbl_auto,     # alias
     }
 
 # ── Generar vendor_cedis_mes_FINAL.csv desde datos BQ frescos ───────────────
