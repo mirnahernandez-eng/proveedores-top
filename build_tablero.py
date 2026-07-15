@@ -64,12 +64,13 @@ body { font-family: sans-serif; background:#f8fafc; }
 .tbl tr:hover td { background: #f1f5f9; }
 .v-name { text-align:left !important; max-width:200px; white-space:nowrap;
           overflow:hidden; text-overflow:ellipsis; }
-.cell-ok   { color:#16a34a; font-weight:700; }
-.cell-bad  { color:#b91c1c; font-weight:800; }
-.col-active { font-weight:800; }
+.cell-ok   { color:#16a34a; }
+.cell-bad  { color:#b91c1c; }
+.col-active { background:rgba(245,158,11,0.07); }
 .cell-null { color:#94a3b8; }
 .cell-obj  { background:#dbeafe; color:#1e40af; font-weight:700; }
 .cell-tot  { background:#f1f5f9; font-weight:700; }
+.cell-prom { font-weight:700; }
 .delta-ok  { color:#16a34a; font-size:0.60rem; font-weight:700; display:block; line-height:1.2; }
 .delta-bad { color:#dc2626; font-size:0.60rem; font-weight:700; display:block; line-height:1.2; }
 .reg-hdr   { background:#334155; color:#e2e8f0; font-size:0.63rem;
@@ -1274,11 +1275,11 @@ function buildTable(title, data, objData, order, regions, loc, period, hasObj, o
             row.appendChild(td(fmt(val), (hasObj?cellCls(val,objL):(val===null?"cell-null":""))+actCls));
           }
           var val26 = (pd["2026"] !== undefined) ? pd["2026"] : null;
-          row.appendChild(td(fmt(val26), (hasObj?cellCls(val26,obj26):(val26===null?"cell-null":""))+actCls));
+          row.appendChild(td(fmt(val26), ((hasObj?cellCls(val26,obj26):(val26===null?"cell-null":""))+" cell-prom"+actCls).trim()));
         } else {
           // Colapsado: solo el total nacional
           var val26 = (pd["2026"] !== undefined) ? pd["2026"] : null;
-          row.appendChild(td(fmt(val26), ((hasObj?cellCls(val26,obj26):(val26===null?"cell-null":""))+actCls+" text-center").trim()));
+          row.appendChild(td(fmt(val26), ((hasObj?cellCls(val26,obj26):(val26===null?"cell-null":""))+" cell-prom text-center"+actCls).trim()));
         }
       }
       tbody.appendChild(row);
@@ -1308,11 +1309,11 @@ function buildTable(title, data, objData, order, regions, loc, period, hasObj, o
           totRow.appendChild(td(fmt(val), tcls.trim()));
         }
         var val26 = (pd["2026"] !== undefined) ? pd["2026"] : null;
-        var tcls26 = (hasObj?cellCls(val26,objTot26):(val26===null?"cell-null":""))+" font-bold"+actCls;
+        var tcls26 = (hasObj?cellCls(val26,objTot26):(val26===null?"cell-null":""))+" font-bold cell-prom"+actCls;
         totRow.appendChild(td(fmt(val26), tcls26.trim()));
       } else {
         var val26 = (pd["2026"] !== undefined) ? pd["2026"] : null;
-        var tcls26 = (hasObj?cellCls(val26,objTot26):(val26===null?"cell-null":""))+" font-bold text-center"+actCls;
+        var tcls26 = (hasObj?cellCls(val26,objTot26):(val26===null?"cell-null":""))+" font-bold cell-prom text-center"+actCls;
         totRow.appendChild(td(fmt(val26), tcls26.trim()));
       }
     }
