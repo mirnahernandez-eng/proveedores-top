@@ -1206,13 +1206,13 @@ function buildTable(title, data, objData, order, regions, loc, period, hasObj, o
         var lc  = allLocs[li];
         var val = (pd[lc] !== undefined) ? pd[lc] : null;
         var objL = objTot ? (objTot[lc] !== undefined ? objTot[lc] : null) : null;
-        if (hasObj) { totRow.appendChild(tdDelta(val, objL, ("cell-tot" + actCls).trim())); }
-        else { totRow.appendChild(td(fmt(val), ("cell-tot" + actCls).trim())); }
+        var tcls = (hasObj ? cellCls(val, objL) : (val===null?"cell-null":"")) + " font-bold" + actCls;
+        totRow.appendChild(td(fmt(val), tcls.trim()));
       }
       var val26 = (pd["2026"] !== undefined) ? pd["2026"] : null;
       var obj26 = objTot ? (objTot["2026"] !== undefined ? objTot["2026"] : null) : null;
-      if (hasObj) { totRow.appendChild(tdDelta(val26, obj26, ("cell-tot" + actCls).trim())); }
-      else { totRow.appendChild(td(fmt(val26), ("cell-tot" + actCls).trim())); }
+      var tcls26 = (hasObj ? cellCls(val26, obj26) : (val26===null?"cell-null":"")) + " font-bold" + actCls;
+      totRow.appendChild(td(fmt(val26), tcls26.trim()));
     }
     tbody.appendChild(totRow);
 
@@ -1258,7 +1258,7 @@ function buildTable(title, data, objData, order, regions, loc, period, hasObj, o
     totRow.appendChild(td(fmt(objLT), "cell-tot font-bold"));
     for (var pi = 0; pi < PERIODS.length; pi++) {
       var val    = getVal(data, "__total__", PERIODS[pi], loc, filtLocs);
-      var clsTot = (hasObj ? cellCls(val, objLT) + " cell-tot" : "cell-tot") + (pi === activePeriodIdx ? " col-active" : "");
+      var clsTot = (hasObj ? cellCls(val, objLT) : (val===null?"cell-null":"")) + " font-bold" + (pi === activePeriodIdx ? " col-active" : "");
       totRow.appendChild(td(fmt(val), clsTot.trim()));
     }
     tbody.appendChild(totRow);
