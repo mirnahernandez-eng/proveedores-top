@@ -69,8 +69,9 @@ body { font-family: sans-serif; background:#f8fafc; }
 .col-active { background:rgba(245,158,11,0.07); }
 .cell-null { color:#94a3b8; }
 .cell-obj  { background:#dbeafe; color:#1e40af; font-weight:700; }
-.cell-tot  { background:#f1f5f9; font-weight:700; }
-.cell-prom { font-weight:700; }
+.cell-tot  { background:#f1f5f9; font-weight:700; font-size:0.78rem; }
+.cell-prom { font-weight:700; font-size:0.78rem; }
+.tbl td.font-bold { font-size:0.78rem; }
 .delta-ok  { color:#16a34a; font-size:0.60rem; font-weight:700; display:block; line-height:1.2; }
 .delta-bad { color:#dc2626; font-size:0.60rem; font-weight:700; display:block; line-height:1.2; }
 .reg-hdr   { background:#334155; color:#e2e8f0; font-size:0.63rem;
