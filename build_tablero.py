@@ -21,7 +21,20 @@ def load_data():
         final = json.load(f)
     with open(os.path.join(BQ, "matrix_PEREC.json"), encoding="utf-8") as f:
         perec = json.load(f)
-    return final, perec
+    # Fecha hasta la que están actualizados los datos (última SW en sw_data.json)
+    last_date = ""
+    sw_path = os.path.join(BASE, "sw_data.json")
+    if os.path.exists(sw_path):
+        with open(sw_path, encoding="utf-8-sig") as f:
+            sw = json.load(f)
+        dates = sw.get("sw_dates", {})
+        if dates:
+            last_fin = sorted(v["fin"] for v in dates.values() if "fin" in v)[-1]
+            # Formatear como DD/MM/YYYY
+            y, m, d = last_fin.split("-")
+            meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"]
+            last_date = f"{d} {meses[int(m)-1]} {y}"
+    return final, perec, last_date
 
 
 # ── HTML SECTIONS ──────────────────────────────────────────────────────────────
@@ -106,6 +119,7 @@ select { border:1px solid #cbd5e1; border-radius:6px;
   <div id="updateBar-progress" style="display:none;width:120px;height:6px;background:#dbeafe;border-radius:3px;overflow:hidden;">
     <div id="progressFill" style="height:100%;width:0;background:#2563eb;transition:width .4s;"></div>
   </div>
+  <span class="ml-auto text-xs text-slate-500">&#128197; Datos al: <b id="lastDateLbl" class="text-slate-700">DATA_LAST_DATE_PH</b></span>
 </div>
 
 <div class="flex flex-wrap gap-3 mb-6 bg-white p-3 rounded-xl shadow-sm border border-slate-200 items-center">
@@ -1377,8 +1391,10 @@ renderAll();
 """
 
 
-def build_html(final, perec):
-    parts = [HEAD]
+def build_html(final, perec, last_date=""):
+    # Inyectar fecha al HTML estático antes de incrustar scripts
+    head_with_date = HEAD.replace("DATA_LAST_DATE_PH", last_date)
+    parts = [head_with_date]
 
     # ── Embedded data ──
     parts.append("<script>\n")
@@ -1398,6 +1414,7 @@ def build_html(final, perec):
     parts.append(f"var DATA_ALL_CHART       = {j(final.get('all_chart', {}))};\n")
     parts.append(f"var DATA_CD         = {j(final.get('cd_matrix', {}))};\n")
     parts.append(f"var DATA_CHART_CD   = null; // cargado lazy via fetch\n")
+    parts.append(f"var DATA_LAST_DATE  = {j(last_date)};\n")
     parts.append(f"var DATA_PEREC_AUTO = {j(perec.get('auto', {}))};\n")
     parts.append(f"var DATA_PEREC_SAMS = {j(perec.get('sams', {}))};\n")
     parts.append(f"var DISPLAY_ORDER   = {j(final.get('display_order', []))};\n")
@@ -1410,10 +1427,11 @@ def build_html(final, perec):
 
 def main():
     print("Loading JSON data...")
-    final, perec = load_data()
+    final, perec, last_date = load_data()
     print(f"  AUTO vendors:  {len(final.get('auto', {}))}")
     print(f"  SAMS vendors:  {len(final.get('sams', {}))}")
     print(f"  PEREC vendors: {len(perec.get('auto', {}))}")
+    print(f"  Datos al:      {last_date}")
 
     # Guardar cd_chart separado para carga lazy
     cd_chart_path = os.path.join(BQ, "cd_chart.json")
@@ -1422,7 +1440,7 @@ def main():
     print(f"  cd_chart.json: {os.path.getsize(cd_chart_path)//1024} KB")
 
     print("Building HTML...")
-    html = build_html(final, perec)
+    html = build_html(final, perec, last_date)
 
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(html)
