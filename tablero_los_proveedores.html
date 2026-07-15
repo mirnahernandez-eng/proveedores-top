@@ -1119,11 +1119,12 @@ function buildTable(title, data, objData, order, regions, loc, period, hasObj, o
   tbl.appendChild(thead); tbl.appendChild(tbody);
 
   var isAll   = (loc === "__all__") && (!filtLocs || filtLocs.length === 0);
+  var allLocs  = flatLocs(regions);
+  var activePeriodIdx = PERIODS.indexOf(period);
 
-  // ── Periodos visibles: mes anterior + mes en curso + YTD ─────────────────
-  // Solo se aplica en modo mes (no SW). En modo SW se muestran todos.
-  var visPer;
-  if (!overridePeriods) {
+  if (isAll && !overridePeriods) {
+    // ── VISTA COMPLETA (modo mes): objetivos + meses expandidos/colapsados ──
+    // Detectar el último mes con datos (= mes en curso)
     var ALL_MONTHS_FULL = ALL_PER.filter(function(p){ return p !== 'ytd'; });
     var lastMIdx = -1;
     for (var mi2 = ALL_MONTHS_FULL.length - 1; mi2 >= 0; mi2--) {
@@ -1136,110 +1137,273 @@ function buildTable(title, data, objData, order, regions, loc, period, hasObj, o
       }
       if (hasMD) { lastMIdx = mi2; break; }
     }
-    visPer = [];
-    if (lastMIdx > 0) visPer.push(ALL_MONTHS_FULL[lastMIdx - 1]); // mes anterior
-    if (lastMIdx >= 0) visPer.push(ALL_MONTHS_FULL[lastMIdx]);     // mes en curso
-    visPer.push('ytd');                                              // YTD siempre
-    // Si el usuario seleccionó un mes anterior que no está, añadirlo antes de YTD
-    if (period && period !== 'ytd' && visPer.indexOf(period) < 0) {
-      visPer.splice(visPer.length - 1, 0, period);
-    }
-  } else {
-    visPer = PERIODS; // modo SW: mostrar todos los periodos recibidos
-  }
-  var visActIdx = visPer.indexOf(period);
+    // Periodos siempre expandidos (bloque completo por CEDIS)
+    var alwaysExp = [];
+    if (lastMIdx > 0) alwaysExp.push(ALL_MONTHS_FULL[lastMIdx - 1]); // mes anterior
+    if (lastMIdx >= 0) alwaysExp.push(ALL_MONTHS_FULL[lastMIdx]);     // mes en curso
+    alwaysExp.push('ytd');
+    // Si el usuario seleccionó un mes colapsado, ese también se expande
+    var selExp = (period && alwaysExp.indexOf(period) < 0) ? period : null;
 
-  if (isAll) {
-    // ── VISTA NACIONAL: Objetivo 2026 + meses visibles (sin desglose por CD) ──
-    var trH = document.createElement("tr");
-    trH.appendChild(th("Proveedores TOP", 1, 1, "v-name text-left", "#1e3a8a"));
-    trH.appendChild(th("Objetivo", 1, 1, "", "#1e3a8a"));
-    for (var vi2 = 0; vi2 < visPer.length; vi2++) {
-      var bg = PER_BG[visPer[vi2]] || "#1d4ed8";
-      trH.appendChild(th(PER_LBL[visPer[vi2]] || visPer[vi2], 1, 1, "", bg));
+    // Lista de meses a mostrar: todos los que tienen datos + ytd
+    var visMonths = [];
+    for (var mi2 = 0; mi2 < ALL_MONTHS_FULL.length; mi2++) {
+      var pm = ALL_MONTHS_FULL[mi2];
+      var hasMD2 = false;
+      for (var vi2 = 0; vi2 < order.length && !hasMD2; vi2++) {
+        var vd2 = data[order[vi2]];
+        if (!vd2 || !vd2[pm]) continue;
+        var pd2 = vd2[pm];
+        for (var kk in pd2) { if (pd2[kk] != null) { hasMD2 = true; break; } }
+      }
+      if (hasMD2) visMonths.push(pm);
     }
-    thead.appendChild(trH);
+    visMonths.push('ytd');
 
-    // Filas de proveedores
+    var secCols = allLocs.length + 1;
+
+    // ── Fila 1: secciones ──
+    var tr1 = document.createElement("tr");
+    tr1.appendChild(th("Proveedores TOP", 3, 1, "v-name text-left", "#1e3a8a"));
+    tr1.appendChild(th("Objetivos LOS 2026 por Cedis", 1, secCols, "", "#1e3a8a"));
+    for (var pi = 0; pi < visMonths.length; pi++) {
+      var pp = visMonths[pi];
+      var bg = PER_BG[pp] || "#1d4ed8";
+      var lbl = PER_LBL[pp] || pp;
+      var isAct = (pp === period);
+      var isExp = (alwaysExp.indexOf(pp) >= 0 || pp === selExp);
+      if (isExp) {
+        var thEl = th(lbl, 1, secCols, "", bg);
+        if (isAct) { thEl.style.outline="3px solid #f59e0b"; thEl.style.outlineOffset="-3px"; }
+        tr1.appendChild(thEl);
+      } else {
+        // Colapsado: una sola celda, rowspan=3 para cubrir las filas de región y CD
+        var thEl = th(lbl, 3, 1, "text-xs", bg);
+        thEl.style.writingMode="vertical-rl";
+        thEl.style.textOrientation="mixed";
+        thEl.style.padding="4px 2px";
+        thEl.title="Selecciona este mes en el filtro para ver el detalle por CD";
+        if (isAct) { thEl.style.outline="3px solid #f59e0b"; thEl.style.outlineOffset="-3px"; }
+        tr1.appendChild(thEl);
+      }
+    }
+    thead.appendChild(tr1);
+
+    // ── Fila 2: regiones (solo bloques expandidos) ──
+    var tr2 = document.createElement("tr");
+    // Bloque objetivos
+    for (var ri = 0; ri < regions.length; ri++) {
+      var rbg = REG_BG[regions[ri].n] || "#334155";
+      tr2.appendChild(th(regions[ri].n, 1, regions[ri].l.length, "reg-hdr", rbg));
+    }
+    tr2.appendChild(th("2026", 1, 1, "", "#b45309"));
+    // Bloques expandidos
+    for (var pi = 0; pi < visMonths.length; pi++) {
+      var pp = visMonths[pi];
+      if (alwaysExp.indexOf(pp) < 0 && pp !== selExp) continue; // colapsado → skip
+      for (var ri = 0; ri < regions.length; ri++) {
+        var rbg = REG_BG[regions[ri].n] || "#334155";
+        tr2.appendChild(th(regions[ri].n, 1, regions[ri].l.length, "reg-hdr", rbg));
+      }
+      tr2.appendChild(th("2026", 1, 1, "", "#b45309"));
+    }
+    thead.appendChild(tr2);
+
+    // ── Fila 3: códigos de CD (solo bloques expandidos) ──
+    var tr3 = document.createElement("tr");
+    for (var li = 0; li < allLocs.length; li++) {
+      tr3.appendChild(th(allLocs[li], 1, 1, "", "#3b82f6"));
+    }
+    tr3.appendChild(th("Prom", 1, 1, "", "#d97706"));
+    for (var pi = 0; pi < visMonths.length; pi++) {
+      var pp = visMonths[pi];
+      if (alwaysExp.indexOf(pp) < 0 && pp !== selExp) continue;
+      for (var li = 0; li < allLocs.length; li++) {
+        tr3.appendChild(th(allLocs[li], 1, 1, "", "#3b82f6"));
+      }
+      tr3.appendChild(th("Prom", 1, 1, "", "#d97706"));
+    }
+    thead.appendChild(tr3);
+
+    // ── Filas de proveedores ──
     for (var vi = 0; vi < order.length; vi++) {
       var v = order[vi];
       var vd = data[v]; if (!vd) continue;
       var ov = (objData && objData[v]) ? objData[v] : null;
       var obj26 = ov ? (ov["2026"] !== undefined ? ov["2026"] : null) : null;
-      var anyData = false;
-      for (var vi2 = 0; vi2 < visPer.length; vi2++) {
-        if (getVal(data, v, visPer[vi2], loc, null) != null) { anyData = true; break; }
-      }
-      if (!anyData) continue;
       var row = document.createElement("tr");
       var tdN = td(v, "v-name"); tdN.title = v; row.appendChild(tdN);
+      // Bloque objetivos
+      for (var li = 0; li < allLocs.length; li++) {
+        row.appendChild(td(fmt(ov ? ov[allLocs[li]] : null), "cell-obj"));
+      }
       row.appendChild(td(fmt(obj26), "cell-obj"));
-      for (var vi2 = 0; vi2 < visPer.length; vi2++) {
-        var val    = getVal(data, v, visPer[vi2], loc, null);
-        var actCls = (vi2 === visActIdx) ? " col-active" : "";
-        var cls    = (hasObj ? cellCls(val, obj26) : (val===null?"cell-null":"")) + actCls;
-        row.appendChild(td(fmt(val), cls.trim()));
+      // Bloques por periodo
+      for (var pi = 0; pi < visMonths.length; pi++) {
+        var pp = visMonths[pi];
+        var pd = vd[pp] || {};
+        var actCls = (pp === period) ? " col-active" : "";
+        var isExp = (alwaysExp.indexOf(pp) >= 0 || pp === selExp);
+        if (isExp) {
+          for (var li = 0; li < allLocs.length; li++) {
+            var lc = allLocs[li];
+            var val = (pd[lc] !== undefined) ? pd[lc] : null;
+            var objL = ov ? (ov[lc] !== undefined ? ov[lc] : null) : null;
+            row.appendChild(td(fmt(val), (hasObj?cellCls(val,objL):(val===null?"cell-null":""))+actCls));
+          }
+          var val26 = (pd["2026"] !== undefined) ? pd["2026"] : null;
+          row.appendChild(td(fmt(val26), (hasObj?cellCls(val26,obj26):(val26===null?"cell-null":""))+actCls));
+        } else {
+          // Colapsado: solo el total nacional
+          var val26 = (pd["2026"] !== undefined) ? pd["2026"] : null;
+          row.appendChild(td(fmt(val26), ((hasObj?cellCls(val26,obj26):(val26===null?"cell-null":""))+actCls+" text-center").trim()));
+        }
       }
       tbody.appendChild(row);
     }
 
-    // Fila Total
+    // ── Fila Total ──
     var totRow = document.createElement("tr");
     totRow.appendChild(td("Total", "v-name cell-tot font-bold"));
     var objTot = (objData && objData["__total__"]) ? objData["__total__"] : null;
     var objTot26 = objTot ? (objTot["2026"] !== undefined ? objTot["2026"] : null) : null;
+    for (var li = 0; li < allLocs.length; li++) {
+      totRow.appendChild(td(fmt(objTot ? objTot[allLocs[li]] : null), "cell-tot font-bold"));
+    }
     totRow.appendChild(td(fmt(objTot26), "cell-tot font-bold"));
-    for (var vi2 = 0; vi2 < visPer.length; vi2++) {
-      var val    = getVal(data, "__total__", visPer[vi2], loc, null);
-      var actCls = (vi2 === visActIdx) ? " col-active" : "";
-      var tcls   = (hasObj ? cellCls(val, objTot26) : (val===null?"cell-null":"")) + " font-bold" + actCls;
-      totRow.appendChild(td(fmt(val), tcls.trim()));
+    var totData2 = data["__total__"] || {};
+    for (var pi = 0; pi < visMonths.length; pi++) {
+      var pp = visMonths[pi];
+      var pd = totData2[pp] || {};
+      var actCls = (pp === period) ? " col-active" : "";
+      var isExp = (alwaysExp.indexOf(pp) >= 0 || pp === selExp);
+      if (isExp) {
+        for (var li = 0; li < allLocs.length; li++) {
+          var lc = allLocs[li];
+          var val = (pd[lc] !== undefined) ? pd[lc] : null;
+          var objL = objTot ? (objTot[lc] !== undefined ? objTot[lc] : null) : null;
+          var tcls = (hasObj?cellCls(val,objL):(val===null?"cell-null":""))+" font-bold"+actCls;
+          totRow.appendChild(td(fmt(val), tcls.trim()));
+        }
+        var val26 = (pd["2026"] !== undefined) ? pd["2026"] : null;
+        var tcls26 = (hasObj?cellCls(val26,objTot26):(val26===null?"cell-null":""))+" font-bold"+actCls;
+        totRow.appendChild(td(fmt(val26), tcls26.trim()));
+      } else {
+        var val26 = (pd["2026"] !== undefined) ? pd["2026"] : null;
+        var tcls26 = (hasObj?cellCls(val26,objTot26):(val26===null?"cell-null":""))+" font-bold text-center"+actCls;
+        totRow.appendChild(td(fmt(val26), tcls26.trim()));
+      }
+    }
+    tbody.appendChild(totRow);
+
+  } else if (isAll && overridePeriods) {
+    // ── VISTA COMPLETA modo SW: bloque por SW con CDs ──
+    var secCols = allLocs.length + 1;
+    var tr1 = document.createElement("tr");
+    tr1.appendChild(th("Proveedores TOP", 3, 1, "v-name text-left", "#1e3a8a"));
+    tr1.appendChild(th("Objetivos LOS 2026 por Cedis", 1, secCols, "", "#1e3a8a"));
+    for (var pi = 0; pi < PERIODS.length; pi++) {
+      var bg = PER_BG[PERIODS[pi]] || "#6d28d9";
+      tr1.appendChild(th(PER_LBL[PERIODS[pi]] || PERIODS[pi], 1, secCols, "", bg));
+    }
+    thead.appendChild(tr1);
+    var tr2 = document.createElement("tr");
+    for (var bi = 0; bi <= PERIODS.length; bi++) {
+      for (var ri = 0; ri < regions.length; ri++) {
+        var rbg = REG_BG[regions[ri].n] || "#334155";
+        tr2.appendChild(th(regions[ri].n, 1, regions[ri].l.length, "reg-hdr", rbg));
+      }
+      tr2.appendChild(th("2026", 1, 1, "", "#b45309"));
+    }
+    thead.appendChild(tr2);
+    var tr3 = document.createElement("tr");
+    for (var bi = 0; bi <= PERIODS.length; bi++) {
+      for (var li = 0; li < allLocs.length; li++) tr3.appendChild(th(allLocs[li], 1, 1, "", "#3b82f6"));
+      tr3.appendChild(th("Prom", 1, 1, "", "#d97706"));
+    }
+    thead.appendChild(tr3);
+    for (var vi = 0; vi < order.length; vi++) {
+      var v = order[vi];
+      var vd = data[v]; if (!vd) continue;
+      var ov = (objData && objData[v]) ? objData[v] : null;
+      var obj26 = ov ? (ov["2026"] !== undefined ? ov["2026"] : null) : null;
+      var row = document.createElement("tr");
+      var tdN = td(v, "v-name"); tdN.title = v; row.appendChild(tdN);
+      for (var li = 0; li < allLocs.length; li++) row.appendChild(td(fmt(ov?ov[allLocs[li]]:null), "cell-obj"));
+      row.appendChild(td(fmt(obj26), "cell-obj"));
+      for (var pi = 0; pi < PERIODS.length; pi++) {
+        var pd = vd[PERIODS[pi]] || {};
+        var actCls = (pi === activePeriodIdx) ? " col-active" : "";
+        for (var li = 0; li < allLocs.length; li++) {
+          var lc = allLocs[li]; var val = pd[lc] !== undefined ? pd[lc] : null;
+          var objL = ov ? (ov[lc] !== undefined ? ov[lc] : null) : null;
+          row.appendChild(td(fmt(val), (hasObj?cellCls(val,objL):(val===null?"cell-null":""))+actCls));
+        }
+        var val26 = pd["2026"] !== undefined ? pd["2026"] : null;
+        row.appendChild(td(fmt(val26), (hasObj?cellCls(val26,obj26):(val26===null?"cell-null":""))+actCls));
+      }
+      tbody.appendChild(row);
+    }
+    var totRow = document.createElement("tr");
+    totRow.appendChild(td("Total", "v-name cell-tot font-bold"));
+    var objTot = (objData&&objData["__total__"])?objData["__total__"]:null;
+    var objTot26 = objTot?(objTot["2026"]!==undefined?objTot["2026"]:null):null;
+    for (var li = 0; li < allLocs.length; li++) totRow.appendChild(td(fmt(objTot?objTot[allLocs[li]]:null), "cell-tot font-bold"));
+    totRow.appendChild(td(fmt(objTot26), "cell-tot font-bold"));
+    var totData2 = data["__total__"] || {};
+    for (var pi = 0; pi < PERIODS.length; pi++) {
+      var pd = totData2[PERIODS[pi]] || {};
+      var actCls = (pi === activePeriodIdx) ? " col-active" : "";
+      for (var li = 0; li < allLocs.length; li++) {
+        var lc = allLocs[li]; var val = pd[lc] !== undefined ? pd[lc] : null;
+        var objL = objTot?(objTot[lc]!==undefined?objTot[lc]:null):null;
+        var tcls = (hasObj?cellCls(val,objL):(val===null?"cell-null":""))+" font-bold"+actCls;
+        totRow.appendChild(td(fmt(val), tcls.trim()));
+      }
+      var val26 = pd["2026"]!==undefined?pd["2026"]:null;
+      var tcls26 = (hasObj?cellCls(val26,objTot26):(val26===null?"cell-null":""))+" font-bold"+actCls;
+      totRow.appendChild(td(fmt(val26), tcls26.trim()));
     }
     tbody.appendChild(totRow);
 
   } else {
-    // ── VISTA SIMPLE: proveedor | objetivo | periodos visibles ──
+    // ── VISTA SIMPLE (loc específica o filtro CD): muestra todos los periodos ──
     var trH = document.createElement("tr");
     trH.appendChild(th("Proveedores TOP", 1, 1, "v-name text-left", "#1e3a8a"));
     trH.appendChild(th("Objetivo", 1, 1, "", "#1e3a8a"));
-    for (var vi2 = 0; vi2 < visPer.length; vi2++) {
-      var bg = PER_BG[visPer[vi2]] || "#1d4ed8";
-      trH.appendChild(th(PER_LBL[visPer[vi2]] || visPer[vi2], 1, 1, "", bg));
+    for (var pi = 0; pi < PERIODS.length; pi++) {
+      var bg = PER_BG[PERIODS[pi]] || "#1d4ed8";
+      trH.appendChild(th(PER_LBL[PERIODS[pi]] || PERIODS[pi], 1, 1, "", bg));
     }
     thead.appendChild(trH);
-
     for (var vi = 0; vi < order.length; vi++) {
       var v = order[vi];
       var vd = data[v]; if (!vd) continue;
       var objL = getObjVal(objData, v, filtLocs, loc);
       var anyData = false;
-      for (var vi2 = 0; vi2 < visPer.length; vi2++) {
-        if (getVal(data, v, visPer[vi2], loc, filtLocs) != null) { anyData = true; break; }
+      for (var pi = 0; pi < PERIODS.length; pi++) {
+        if (getVal(data, v, PERIODS[pi], loc, filtLocs) != null) { anyData = true; break; }
       }
       if (!anyData) continue;
       var row = document.createElement("tr");
       var tdN = td(v, "v-name"); tdN.title = v; row.appendChild(tdN);
       row.appendChild(td(fmt(objL), "cell-obj"));
-      for (var vi2 = 0; vi2 < visPer.length; vi2++) {
-        var val    = getVal(data, v, visPer[vi2], loc, filtLocs);
-        var actCls = (vi2 === visActIdx) ? " col-active" : "";
-        var cls    = (hasObj ? cellCls(val, objL) : (val === null ? "cell-null" : "")) + actCls;
+      for (var pi = 0; pi < PERIODS.length; pi++) {
+        var val = getVal(data, v, PERIODS[pi], loc, filtLocs);
+        var cls = (hasObj ? cellCls(val, objL) : (val === null ? "cell-null" : ""));
+        if (pi === activePeriodIdx) cls += " col-active";
         row.appendChild(td(fmt(val), cls.trim()));
       }
       tbody.appendChild(row);
     }
-
-    // Fila total
     var totRow = document.createElement("tr");
     var objLT = objData && objData["__total__"]
-      ? getObjVal(objData, "__total__", filtLocs, loc)
-      : null;
+      ? getObjVal(objData, "__total__", filtLocs, loc) : null;
     totRow.appendChild(td("Total", "v-name cell-tot font-bold"));
     totRow.appendChild(td(fmt(objLT), "cell-tot font-bold"));
-    for (var vi2 = 0; vi2 < visPer.length; vi2++) {
-      var val    = getVal(data, "__total__", visPer[vi2], loc, filtLocs);
-      var actCls = (vi2 === visActIdx) ? " col-active" : "";
-      var clsTot = (hasObj ? cellCls(val, objLT) : (val===null?"cell-null":"")) + " font-bold" + actCls;
+    for (var pi = 0; pi < PERIODS.length; pi++) {
+      var val    = getVal(data, "__total__", PERIODS[pi], loc, filtLocs);
+      var clsTot = (hasObj?cellCls(val,objLT):(val===null?"cell-null":""))+" font-bold"+(pi===activePeriodIdx?" col-active":"");
       totRow.appendChild(td(fmt(val), clsTot.trim()));
     }
     tbody.appendChild(totRow);
