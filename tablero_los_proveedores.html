@@ -1139,8 +1139,7 @@ function buildTable(title, data, objData, order, regions, loc, period, hasObj, o
     }
     // Periodos siempre expandidos (bloque completo por CEDIS)
     var alwaysExp = [];
-    if (lastMIdx > 0) alwaysExp.push(ALL_MONTHS_FULL[lastMIdx - 1]); // mes anterior
-    if (lastMIdx >= 0) alwaysExp.push(ALL_MONTHS_FULL[lastMIdx]);     // mes en curso
+    if (lastMIdx >= 0) alwaysExp.push(ALL_MONTHS_FULL[lastMIdx]); // solo mes en curso
     alwaysExp.push('ytd');
     // Si el usuario seleccionó un mes colapsado, ese también se expande
     var selExp = (period && alwaysExp.indexOf(period) < 0) ? period : null;
