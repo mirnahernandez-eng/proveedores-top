@@ -28,7 +28,8 @@ body { font-family: sans-serif; background:#f8fafc; }
 .col-active { background:rgba(245,158,11,0.07); }
 .cell-null { color:#94a3b8; }
 .cell-obj  { background:#dbeafe; color:#1e40af; font-weight:700; }
-.cell-tot  { background:#f1f5f9; font-weight:700; font-size:0.78rem; }
+.cell-tot  { background:#f1f5f9; font-weight:700; font-size:0.78rem; border-top:2px solid #d1d5db; }
+.reg-split { border-left:2px solid #e2e8f0 !important; }
 .cell-prom { font-weight:700; font-size:0.78rem; }
 .tbl td.font-bold { font-size:0.78rem; }
 .delta-ok  { color:#16a34a; font-size:0.60rem; font-weight:700; display:block; line-height:1.2; }
@@ -618,6 +619,18 @@ function tdDelta(val, obj, extraCls) {
   var colorCls = diff <= 0 ? "cell-ok" : "cell-bad";
   el.className = colorCls + (extraCls ? " " + extraCls : "");
   return el;
+}
+
+// Devuelve true si la locacion en el indice 'li' es la primera de una región (salvo la región 0)
+function isRegStart(li, allLocs, regions) {
+  if (li === 0) return false; // la primera columna no necesita separador izquierdo
+  var cum = 0;
+  for (var ri = 1; ri < regions.length; ri++) {
+    for (var rj = 0; rj < ri; rj++) cum += regions[rj].l.length;
+    if (li === cum) return true;
+    cum = 0;
+  }
+  return false;
 }
 
 function flatLocs(regions) {
@@ -1236,7 +1249,8 @@ function buildTable(title, data, objData, order, regions, loc, period, hasObj, o
       var tdN = td(v, "v-name"); tdN.title = v; row.appendChild(tdN);
       // Bloque objetivos
       for (var li = 0; li < allLocs.length; li++) {
-        row.appendChild(td(fmt(ov ? ov[allLocs[li]] : null), "cell-obj"));
+        var rsObj = isRegStart(li, allLocs, regions) ? " reg-split" : "";
+        row.appendChild(td(fmt(ov ? ov[allLocs[li]] : null), "cell-obj" + rsObj));
       }
       row.appendChild(td(fmt(obj26), "cell-obj"));
       // Bloques por periodo
@@ -1250,7 +1264,8 @@ function buildTable(title, data, objData, order, regions, loc, period, hasObj, o
             var lc = allLocs[li];
             var val = (pd[lc] !== undefined) ? pd[lc] : null;
             var objL = ov ? (ov[lc] !== undefined ? ov[lc] : null) : null;
-            row.appendChild(td(fmt(val), (hasObj?cellCls(val,objL):(val===null?"cell-null":""))+actCls));
+            var rsP = isRegStart(li, allLocs, regions) ? " reg-split" : "";
+            row.appendChild(td(fmt(val), ((hasObj?cellCls(val,objL):(val===null?"cell-null":""))+actCls+rsP).trim()));
           }
           var val26 = (pd["2026"] !== undefined) ? pd["2026"] : null;
           row.appendChild(td(fmt(val26), ((hasObj?cellCls(val26,obj26):(val26===null?"cell-null":""))+" cell-prom"+actCls).trim()));
@@ -1269,7 +1284,8 @@ function buildTable(title, data, objData, order, regions, loc, period, hasObj, o
     var objTot = (objData && objData["__total__"]) ? objData["__total__"] : null;
     var objTot26 = objTot ? (objTot["2026"] !== undefined ? objTot["2026"] : null) : null;
     for (var li = 0; li < allLocs.length; li++) {
-      totRow.appendChild(td(fmt(objTot ? objTot[allLocs[li]] : null), "cell-tot font-bold"));
+      var rsTotObj = isRegStart(li, allLocs, regions) ? " reg-split" : "";
+      totRow.appendChild(td(fmt(objTot ? objTot[allLocs[li]] : null), "cell-tot font-bold" + rsTotObj));
     }
     totRow.appendChild(td(fmt(objTot26), "cell-tot font-bold"));
     var totData2 = data["__total__"] || {};
@@ -1283,7 +1299,8 @@ function buildTable(title, data, objData, order, regions, loc, period, hasObj, o
           var lc = allLocs[li];
           var val = (pd[lc] !== undefined) ? pd[lc] : null;
           var objL = objTot ? (objTot[lc] !== undefined ? objTot[lc] : null) : null;
-          var tcls = (hasObj?cellCls(val,objL):(val===null?"cell-null":""))+" font-bold"+actCls;
+          var rsTot = isRegStart(li, allLocs, regions) ? " reg-split" : "";
+          var tcls = (hasObj?cellCls(val,objL):(val===null?"cell-null":""))+" font-bold"+actCls+rsTot;
           totRow.appendChild(td(fmt(val), tcls.trim()));
         }
         var val26 = (pd["2026"] !== undefined) ? pd["2026"] : null;
@@ -1330,7 +1347,10 @@ function buildTable(title, data, objData, order, regions, loc, period, hasObj, o
       var obj26 = ov ? (ov["2026"] !== undefined ? ov["2026"] : null) : null;
       var row = document.createElement("tr");
       var tdN = td(v, "v-name"); tdN.title = v; row.appendChild(tdN);
-      for (var li = 0; li < allLocs.length; li++) row.appendChild(td(fmt(ov?ov[allLocs[li]]:null), "cell-obj"));
+      for (var li = 0; li < allLocs.length; li++) {
+        var rsObjB2 = isRegStart(li, allLocs, regions) ? " reg-split" : "";
+        row.appendChild(td(fmt(ov?ov[allLocs[li]]:null), "cell-obj" + rsObjB2));
+      }
       row.appendChild(td(fmt(obj26), "cell-obj"));
       for (var pi = 0; pi < PERIODS.length; pi++) {
         var pd = vd[PERIODS[pi]] || {};
@@ -1338,7 +1358,8 @@ function buildTable(title, data, objData, order, regions, loc, period, hasObj, o
         for (var li = 0; li < allLocs.length; li++) {
           var lc = allLocs[li]; var val = pd[lc] !== undefined ? pd[lc] : null;
           var objL = ov ? (ov[lc] !== undefined ? ov[lc] : null) : null;
-          row.appendChild(td(fmt(val), (hasObj?cellCls(val,objL):(val===null?"cell-null":""))+actCls));
+          var rsPB2 = isRegStart(li, allLocs, regions) ? " reg-split" : "";
+          row.appendChild(td(fmt(val), ((hasObj?cellCls(val,objL):(val===null?"cell-null":""))+actCls+rsPB2).trim()));
         }
         var val26 = pd["2026"] !== undefined ? pd["2026"] : null;
         row.appendChild(td(fmt(val26), (hasObj?cellCls(val26,obj26):(val26===null?"cell-null":""))+actCls));
@@ -1349,7 +1370,10 @@ function buildTable(title, data, objData, order, regions, loc, period, hasObj, o
     totRow.appendChild(td("Total", "v-name cell-tot font-bold"));
     var objTot = (objData&&objData["__total__"])?objData["__total__"]:null;
     var objTot26 = objTot?(objTot["2026"]!==undefined?objTot["2026"]:null):null;
-    for (var li = 0; li < allLocs.length; li++) totRow.appendChild(td(fmt(objTot?objTot[allLocs[li]]:null), "cell-tot font-bold"));
+    for (var li = 0; li < allLocs.length; li++) {
+      var rsTotB2 = isRegStart(li, allLocs, regions) ? " reg-split" : "";
+      totRow.appendChild(td(fmt(objTot?objTot[allLocs[li]]:null), "cell-tot font-bold" + rsTotB2));
+    }
     totRow.appendChild(td(fmt(objTot26), "cell-tot font-bold"));
     var totData2 = data["__total__"] || {};
     for (var pi = 0; pi < PERIODS.length; pi++) {
@@ -1358,7 +1382,8 @@ function buildTable(title, data, objData, order, regions, loc, period, hasObj, o
       for (var li = 0; li < allLocs.length; li++) {
         var lc = allLocs[li]; var val = pd[lc] !== undefined ? pd[lc] : null;
         var objL = objTot?(objTot[lc]!==undefined?objTot[lc]:null):null;
-        var tcls = (hasObj?cellCls(val,objL):(val===null?"cell-null":""))+" font-bold"+actCls;
+        var rsTotPB2 = isRegStart(li, allLocs, regions) ? " reg-split" : "";
+        var tcls = (hasObj?cellCls(val,objL):(val===null?"cell-null":""))+" font-bold"+actCls+rsTotPB2;
         totRow.appendChild(td(fmt(val), tcls.trim()));
       }
       var val26 = pd["2026"]!==undefined?pd["2026"]:null;
