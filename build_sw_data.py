@@ -9,6 +9,10 @@ from sw_calendar import SW_MES_MAP, SW_DATES, sw_range_label  # fuente única de
 
 BASE = r'C:\Users\mmvhern\OneDrive - Walmart Inc\Escritorio\puppy\YMS_TOP'
 
+# Semana maxima a mostrar (inclusive). SWs > MAX_SW y < 48 se excluyen.
+# Actualizar este valor al inicio de cada nueva semana.
+MAX_SW = 23
+
 # ── helpers ───────────────────────────────────────────────────────────────────
 def _ascii(s):
     return unicodedata.normalize('NFKD', str(s)).encode('ascii','ignore').decode().lower().strip()
@@ -121,6 +125,47 @@ if os.path.exists(EXTRA_CSV):
 else:
     print(f'  (sw21_22_new.csv no encontrado, solo datos del CSV principal)')
 
+# Cargar SWs faltantes desde yms_2026_completo.csv (cubre hasta SW 23/24 de Julio)
+COMPLETO_CSV = os.path.join(BASE, 'bigquery_results', 'yms_2026_completo.csv')
+if os.path.exists(COMPLETO_CSV):
+    # Solo traer SWs que NO esten ya en df (evitar duplicados)
+    sw_ya_en_df = set(pd.to_numeric(df['SW'], errors='coerce').dropna().astype(int).unique())
+    df_comp = pd.read_csv(COMPLETO_CSV, encoding='utf-8', encoding_errors='replace', low_memory=False)
+    df_comp['SW'] = pd.to_numeric(df_comp['SW'], errors='coerce')
+    # Filtrar: solo SWs nuevas y dentro del tope MAX_SW (o >= 48 para semanas de enero)
+    df_comp = df_comp[
+        df_comp['SW'].notna() &
+        ((df_comp['SW'] >= 48) | (df_comp['SW'] <= MAX_SW)) &
+        ~df_comp['SW'].isin(sw_ya_en_df)
+    ].copy()
+    if len(df_comp) > 0:
+        TIPOS_OK = {'Proveedor', 'Cita Nueva', 'PROVEEDOR', 'CITA NUEVA'}
+        if 'TIPO_CITA' in df_comp.columns:
+            df_comp = df_comp[df_comp['TIPO_CITA'].str.strip().isin(TIPOS_OK)].copy()
+        if 'CITAS_CORRECTAS' in df_comp.columns:
+            df_comp = df_comp[pd.to_numeric(df_comp['CITAS_CORRECTAS'], errors='coerce') == 1].copy()
+        # Los valores ya vienen en minutos desde BQ — calcular formula_2
+        for col in ['LLEGADA_A_TRAFICO', 'DURACION_DE_SERVICIO', 'SALIDA_DE_CD']:
+            if col in df_comp.columns:
+                df_comp[col] = pd.to_numeric(df_comp[col], errors='coerce').fillna(0)
+        df_comp['formula_2'] = (
+            df_comp['LLEGADA_A_TRAFICO'].fillna(0) +
+            df_comp['DURACION_DE_SERVICIO'].fillna(0) +
+            df_comp['SALIDA_DE_CD'].fillna(0)
+        ) / 60
+        df_comp.loc[df_comp['formula_2'] <= 0, 'formula_2'] = float('nan')
+        df_comp = df_comp[[c for c in COLS if c in df_comp.columns]]
+        for c in COLS:
+            if c not in df_comp.columns:
+                df_comp[c] = float('nan')
+        df_comp = df_comp[COLS]
+        nuevas_sw = sorted(df_comp['SW'].dropna().astype(int).unique().tolist())
+        print(f'  yms_2026_completo: {len(df_comp):,} rows nuevas | SW={nuevas_sw}')
+        df = pd.concat([df, df_comp], ignore_index=True)
+        print(f'  Total final: {len(df):,} rows')
+    else:
+        print('  yms_2026_completo: sin SWs nuevas que agregar')
+
 for col in ['LLEGADA_A_TRAFICO','DURACION_DE_SERVICIO','SALIDA_DE_CD','formula_2']:
     df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
@@ -143,6 +188,9 @@ print(f'  Matched vendors: {len(df):,}')
 
 # ── SW x mes mapping ──────────────────────────────────────────────────────────
 sw_mes = df.groupby('SW')['MES'].agg(lambda x: x.mode()[0]).to_dict()
+# Excluir SWs futuras: quitar cualquier SW > MAX_SW que no sea semana de cierre de año (48+)
+df = df[((df['SW'] >= 48) | (df['SW'] <= MAX_SW))].copy()
+
 sw_list_raw = sorted(df['SW'].unique().tolist())
 
 # Ordenar: poner 48-52 antes que 1
