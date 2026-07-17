@@ -746,7 +746,14 @@ function renderAll() {
   var swPer  = gSelSW.length === 1 ? gSelSW[0] : '__sel__';
   var activePeriod = useSW ? swPer : period;
   // Multi-SW: tabla muestra cada semana como columna separada; grAfica sigue con el promedio
-  var swOver = useSW ? (gSelSW.length > 1 ? gSelSW.slice() : [activePeriod]) : null;
+  var swOver = useSW ? (gSelSW.length > 1 ? gSelSW.slice().sort(function(a, b) {
+    var list = (SW_DATA && SW_DATA.sw_list) ? SW_DATA.sw_list : [];
+    var ia = list.indexOf(parseInt(a.slice(2)));
+    var ib = list.indexOf(parseInt(b.slice(2)));
+    if (ia < 0) ia = parseInt(a.slice(2));
+    if (ib < 0) ib = parseInt(b.slice(2));
+    return ia - ib;
+  }) : [activePeriod]) : null;
 
   // ── BUNDLE UNICO: misma fuente para grafica Y tabla ─────────────────────
   var b = resolveViewBundle(loc, activePeriod, useSW, swPer);
