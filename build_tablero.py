@@ -173,7 +173,7 @@ select { border:1px solid #cbd5e1; border-radius:6px;
       <option value="Abril">Abril</option>
       <option value="Mayo">Mayo</option>
       <option value="Junio">Junio</option>
-      <option value="Julio">Julio (1-3)</option>
+      <option value="Julio">Julio</option>
       <option value="ytd" selected>YTD</option>
     </select>
   </div>
