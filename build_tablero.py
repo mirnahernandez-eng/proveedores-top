@@ -1287,7 +1287,7 @@ function buildTable(title, data, objData, order, regions, loc, period, hasObj, o
             var lc = allLocs[li];
             var val = (pd[lc] !== undefined) ? pd[lc] : null;
             var objL = ov ? (ov[lc] !== undefined ? ov[lc] : null) : null;
-            var rsP = isRegStart(li, allLocs, regions) ? " reg-split" : "";
+            var rsP = (li === 0 || isRegStart(li, allLocs, regions)) ? " reg-split" : "";
             row.appendChild(td(fmt(val), ((hasObj?cellCls(val,objL):(val===null?"cell-null":""))+actCls+rsP).trim()));
           }
           var val26 = (pd["2026"] !== undefined) ? pd["2026"] : null;
@@ -1322,7 +1322,7 @@ function buildTable(title, data, objData, order, regions, loc, period, hasObj, o
           var lc = allLocs[li];
           var val = (pd[lc] !== undefined) ? pd[lc] : null;
           var objL = objTot ? (objTot[lc] !== undefined ? objTot[lc] : null) : null;
-          var rsTot = isRegStart(li, allLocs, regions) ? " reg-split" : "";
+          var rsTot = (li === 0 || isRegStart(li, allLocs, regions)) ? " reg-split" : "";
           var tcls = (hasObj?cellCls(val,objL):(val===null?"cell-null":""))+" font-bold"+actCls+rsTot;
           totRow.appendChild(td(fmt(val), tcls.trim()));
         }
@@ -1381,7 +1381,7 @@ function buildTable(title, data, objData, order, regions, loc, period, hasObj, o
         for (var li = 0; li < allLocs.length; li++) {
           var lc = allLocs[li]; var val = pd[lc] !== undefined ? pd[lc] : null;
           var objL = ov ? (ov[lc] !== undefined ? ov[lc] : null) : null;
-          var rsPB2 = isRegStart(li, allLocs, regions) ? " reg-split" : "";
+          var rsPB2 = (li === 0 || isRegStart(li, allLocs, regions)) ? " reg-split" : "";
           row.appendChild(td(fmt(val), ((hasObj?cellCls(val,objL):(val===null?"cell-null":""))+actCls+rsPB2).trim()));
         }
         var val26 = pd["2026"] !== undefined ? pd["2026"] : null;
@@ -1405,7 +1405,7 @@ function buildTable(title, data, objData, order, regions, loc, period, hasObj, o
       for (var li = 0; li < allLocs.length; li++) {
         var lc = allLocs[li]; var val = pd[lc] !== undefined ? pd[lc] : null;
         var objL = objTot?(objTot[lc]!==undefined?objTot[lc]:null):null;
-        var rsTotPB2 = isRegStart(li, allLocs, regions) ? " reg-split" : "";
+        var rsTotPB2 = (li === 0 || isRegStart(li, allLocs, regions)) ? " reg-split" : "";
         var tcls = (hasObj?cellCls(val,objL):(val===null?"cell-null":""))+" font-bold"+actCls+rsTotPB2;
         totRow.appendChild(td(fmt(val), tcls.trim()));
       }
