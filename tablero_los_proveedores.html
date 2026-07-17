@@ -745,7 +745,8 @@ function renderAll() {
   var useSW  = gSelSW.length > 0 && SW_DATA;
   var swPer  = gSelSW.length === 1 ? gSelSW[0] : '__sel__';
   var activePeriod = useSW ? swPer : period;
-  var swOver = useSW ? [activePeriod] : null;
+  // Multi-SW: tabla muestra cada semana como columna separada; grAfica sigue con el promedio
+  var swOver = useSW ? (gSelSW.length > 1 ? gSelSW.slice() : [activePeriod]) : null;
 
   // ── BUNDLE UNICO: misma fuente para grafica Y tabla ─────────────────────
   var b = resolveViewBundle(loc, activePeriod, useSW, swPer);
