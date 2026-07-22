@@ -1534,7 +1534,7 @@ document.getElementById('fFin').value = new Date().toISOString().slice(0,10);
 document.getElementById('fFin').max = new Date().toISOString().slice(0,10);
 
 try { Chart.register(ChartDataLabels); } catch(e) { /* datalabels optional */ }
-fetch('sw_data.json').then(function(r){return r.json();}).then(function(d){
+fetch('sw_data.json?v='+Date.now()).then(function(r){return r.json();}).then(function(d){
   SW_DATA = d;
   var panel = document.getElementById('swPanel');
   var clear = document.createElement('div');

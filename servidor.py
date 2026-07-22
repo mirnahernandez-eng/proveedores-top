@@ -107,8 +107,12 @@ def calcular_metricas(df: pd.DataFrame) -> pd.DataFrame:
             df[c] = pd.to_datetime(df[c], errors="coerce", utc=True)
 
     def diff_min(a, b):
-        # Sin exclusiones: se conservan negativos y tiempos altos
         return (a - b).dt.total_seconds() / 60
+
+    # Guardar valores BQ pre-calculados antes de sobreescribir
+    bq_llegada  = pd.to_numeric(df.get("LLEGADA_A_TRAFICO"),   errors="coerce")
+    bq_duracion = pd.to_numeric(df.get("DURACION_DE_SERVICIO"), errors="coerce")
+    bq_salida   = pd.to_numeric(df.get("SALIDA_DE_CD"),         errors="coerce")
 
     df["LLEGADA_A_TRAFICO"]    = diff_min(df["DRIVER_ARRIVAL_TS"], df["ARRIVAL_TS"])
     df["ABRIR"]                = diff_min(df["TRAILER_OPEN_TS"],   df["DRIVER_ARRIVAL_TS"])
@@ -116,11 +120,17 @@ def calcular_metricas(df: pd.DataFrame) -> pd.DataFrame:
     df["PAPER"]                = diff_min(df["POD"],               df["DOCK_DOOR_CLOSE"])
     df["SALIDA_DE_CD"]         = diff_min(df["DEPARTURE_TS"],      df["POD"])
     df["DURACION_DE_SERVICIO"] = df[["ABRIR", "CERRAR", "PAPER"]].sum(axis=1, min_count=1)
-    df["formula_2"] = (
+
+    # formula_2: preferir valores BQ (idénticos a lo que el usuario ve en BQ)
+    # Solo usar timestamps recalculados cuando BQ no tiene los tres campos
+    bq_los = (bq_llegada.fillna(0) + bq_duracion.fillna(0) + bq_salida.fillna(0)) / 60
+    bq_has_values = (bq_llegada.notna() | bq_duracion.notna() | bq_salida.notna())
+    ts_los = (
         df["LLEGADA_A_TRAFICO"].fillna(0) +
         df["DURACION_DE_SERVICIO"].fillna(0) +
         df["SALIDA_DE_CD"].fillna(0)
     ) / 60
+    df["formula_2"] = bq_los.where(bq_has_values & (bq_los > 0), ts_los)
     df.loc[df["formula_2"] <= 0, "formula_2"] = float("nan")
     return df
 
@@ -135,7 +145,7 @@ DISPLAY_ORDER = [
     "FRABEL SA DE CV","MONDELEZ MEXICO S DE RL DE CV","KELLOGG COMPANY MEXICO SRL CV",
 ]
 
-def agregar_sw(df: pd.DataFrame, kw_by_cat: dict) -> dict:
+def agregar_sw(df: pd.DataFrame, kw_by_cat: dict, fecha_fin: str = None) -> dict:
     """Genera estructura sw_data.json compatible con el tablero."""
     from collections import defaultdict
 
@@ -233,6 +243,26 @@ def agregar_sw(df: pd.DataFrame, kw_by_cat: dict) -> dict:
             for sw_key, vals in nat.items():
                 if vals and vals.get("t"):
                     sw_has_data.add(int(sw_key[2:]))
+    # Excluir SWs cuyo inicio sea posterior a fecha_fin (evita que BQ
+    # meta SWs futuros por discrepancias en el campo SW de la tabla)
+    if fecha_fin:
+        sw_has_data = {
+            k for k in sw_has_data
+            if k in SW_DATES and SW_DATES[k]["inicio"] <= fecha_fin
+        }
+    # Purgar SWs excluidos de auto_data y sams_data para que no contaminen
+    # promedios ni graficas (no basta con quitarlos de sw_dates)
+    bad_keys = {
+        f"SW{k}" for k in SW_DATES
+        if fecha_fin and SW_DATES[k]["inicio"] > fecha_fin
+    }
+    if bad_keys:
+        for section in (auto_data, sams_data):
+            for vendor, cedis_map in section.items():
+                for cedis, sw_map in cedis_map.items():
+                    for bk in bad_keys:
+                        sw_map.pop(bk, None)
+
     sw_list_final    = [n for n in sw_list_nums if n in sw_has_data]
     sw_mes_map_final = {f"SW{k}": v for k, v in SW_MES_MAP.items() if k in sw_has_data}
     sw_dates_final   = {
@@ -308,10 +338,12 @@ def generar_csv_mensual(df: pd.DataFrame, kw_by_cat: dict):
         PAPER=("PAPER", "mean"),
         SALIDA=("SALIDA_DE_CD", "mean"),
         TOTAL_HRS=("formula_2", "mean"),
+        LOS_SUM=("formula_2", "sum"),   # suma exacta — evita error de redondeo en YTD
     )
     grp = grp.rename(columns={"_mes": "MES"})
     for col in ["LLEGADA", "ABRIR", "CERRAR", "PAPER", "SALIDA", "TOTAL_HRS"]:
         grp[col] = grp[col].round(4)
+    # LOS_SUM sin redondear para preservar precisión completa
 
     # Guardar en ambas rutas
     for path in [
@@ -332,6 +364,22 @@ def pipeline_actualizar(fecha_inicio: str, fecha_fin: str):
         _estado["pct"] = 35
 
         df_bq = calcular_metricas(df_bq)
+
+        # Descartar registros cuyo campo SW en BQ corresponde a una semana
+        # que aún no ha comenzado según fecha_fin (BQ a veces asigna SW25
+        # a citas que llegaron el último día de SW24, contaminando el conteo)
+        if "SW" in df_bq.columns:
+            sw_num_col = pd.to_numeric(df_bq["SW"], errors="coerce")
+            valid_sws  = {
+                k for k, v in SW_DATES.items()
+                if v["inicio"] <= fecha_fin
+            }
+            mask = sw_num_col.isna() | sw_num_col.isin(valid_sws)
+            dropped = int((~mask).sum())
+            df_bq = df_bq[mask].copy()
+            if dropped:
+                _estado["msg"] = f"Filtrados {dropped} registros con SW fuera de rango. Cargando vendors..."
+
         _estado["msg"] = "Métricas calculadas. Cargando vendors del Excel..."
         _estado["pct"] = 55
 
@@ -343,7 +391,7 @@ def pipeline_actualizar(fecha_inicio: str, fecha_fin: str):
         _estado["msg"] = f"CSV mensual: {filas_csv} filas / {citas_csv:,} citas. Agregando por SW..."
         _estado["pct"] = 70
 
-        sw_data = agregar_sw(df_bq, kw_by_cat)
+        sw_data = agregar_sw(df_bq, kw_by_cat, fecha_fin=fecha_fin)
 
         # Guardar sw_data.json (reemplaza NaN/Infinity con null para JSON valido)
         sw_path = BASE / "sw_data.json"
@@ -435,6 +483,16 @@ async def cd_chart_json():
 async def static(path: str):
     file_path = BASE / path
     if file_path.exists() and file_path.is_file():
+        # JSON y CSV siempre frescos — evita que el browser cachee sw_data.json viejo
+        if file_path.suffix in (".json", ".csv"):
+            from fastapi.responses import Response
+            content = file_path.read_bytes()
+            media = "application/json" if file_path.suffix == ".json" else "text/csv"
+            return Response(
+                content=content, media_type=media,
+                headers={"Cache-Control": "no-store, no-cache, must-revalidate",
+                         "Pragma": "no-cache"}
+            )
         return FileResponse(file_path)
     raise HTTPException(status_code=404, detail="Archivo no encontrado")
 

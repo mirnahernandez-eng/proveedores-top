@@ -100,7 +100,12 @@ with open(CSV, encoding='utf-8-sig') as f:
         cedis  = int(r['CEDIS'])
         mes    = r['MES']
         c      = int(r['TOTAL_CITAS'] or 0)
-        total  = float(r['TOTAL_HRS']  or 0)
+        # Usar LOS_SUM si existe (suma exacta sin error de redondeo)
+        # Fallback: TOTAL_HRS * c (promedio * conteo, como antes)
+        if r.get('LOS_SUM'):
+            los_ws = float(r['LOS_SUM'])
+        else:
+            los_ws = float(r['TOTAL_HRS'] or 0) * c
         llegada= float(r['LLEGADA']    or 0)
         # RECIBO = ABRIR + CERRAR + PAPER (columnas del CSV actual)
         recibo = (float(r.get('RECIBO') or r.get('ABRIR') or 0) +
@@ -108,7 +113,7 @@ with open(CSV, encoding='utf-8-sig') as f:
                   float(r.get('PAPER')  or 0))
         salida = float(r['SALIDA']     or 0)
         raw[disp][cedis][mes]['c']    += c
-        raw[disp][cedis][mes]['ws']   += total   * c
+        raw[disp][cedis][mes]['ws']   += los_ws
         raw[disp][cedis][mes]['wl']   += llegada * c
         raw[disp][cedis][mes]['wr']   += recibo  * c
         raw[disp][cedis][mes]['wsal'] += salida  * c
