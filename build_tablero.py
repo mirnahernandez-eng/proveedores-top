@@ -477,16 +477,6 @@ var gSelCD = [];
 // ── FILTRO FORMATO ─────────────────────────────────────────────────────────────────
 var gFormato = 'all'; // clave activa: all | auto | bae | sams | auto_bae | auto_sams | bae_sams
 
-// Canales que corresponden a cada formato (para sincronizar panel de CDs)
-var FMT_CHANNELS = {
-  'all':       ['auto','bae','sams'],
-  'auto':      ['auto'],
-  'bae':       ['bae'],
-  'sams':      ['sams'],
-  'auto_bae':  ['auto','bae'],
-  'auto_sams': ['auto','sams'],
-  'bae_sams':  ['bae','sams'],
-};
 
 function onFmtChange() {
   gFormato = document.getElementById('fmtSel').value;
@@ -508,6 +498,8 @@ function onLocChange() {
   panel.appendChild(clear);
 
   function addCdItem(d) {
+    // CDs perecederos se excluyen del filtro — tienen sus propias tablas abajo
+    if ((CD_CHANNEL[d.k] || '').indexOf('perec') >= 0) return;
     var item = document.createElement('div'); item.className='ms-item'; item.dataset.val=d.k; item.dataset.lbl=d.n;
     var cb = document.createElement('input'); cb.type='checkbox'; cb.checked=false;
     var sp = document.createElement('span'); sp.textContent=d.n;
@@ -952,30 +944,6 @@ function resolveViewBundle(loc, activePeriod, useSW, swPer) {
     chartData:fd.chart, tblData:fd.tbl,
     objData:fd.obj, regions:fd.reg,
     loc:loc, filtLocs:null, period:activePeriod
-  };
-  // 'auto' o 'bae' sin seleccion CD: deriva CDs por ciudad
-  var cdsCity = (loc === '__all__')
-    ? (function(){ var m=cdsByCanalNacional(gCanal); return Object.keys(m).reduce(function(a,c){return a.concat(m[c]);},[]); })()
-    : cdsForCanalCity(gCanal, loc);
-  if (cdsCity.length === 0) {
-    return { empty:true, emptyMsg:'Sin datos de '+CANAL_TITLE[gCanal]+' para esta locacion.' };
-  }
-  // Carga lazy de cd_chart si no ha sido cargado
-  if (!DATA_CHART_CD) {
-    fetch('/bigquery_results/cd_chart.json')
-      .then(function(r){ return r.json(); })
-      .then(function(data){ DATA_CHART_CD = data; renderAll(); });
-    return { empty:true, emptyMsg:'Cargando datos de CD...' };
-  }
-  return {
-    empty:false, title: CANAL_TITLE[gCanal] || gCanal,
-    chartData: DATA_CHART_CD,
-    tblData:   DATA_CD,
-    objData:   OBJ_AUTO_CD,
-    regions:   buildCDRegions(cdsCity),
-    loc:       cdsCity.length===1 ? cdsCity[0] : '__all__',
-    filtLocs:  cdsCity.length>1  ? cdsCity    : null,
-    period:    activePeriod
   };
 }
 
