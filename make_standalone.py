@@ -52,20 +52,26 @@ if sw_path.exists():
     sw = json.loads(sw_path.read_text(encoding="utf-8"))
     sw_inline = json.dumps(sw, ensure_ascii=False, separators=(",", ":"))
 
-    OLD_FETCH = """fetch('sw_data.json').then(function(r){return r.json();}).then(function(d){
-  SW_DATA = d;"""
-    NEW_INLINE = f"""(function(){{
-  var d = {sw_inline};
-  SW_DATA = d;"""
+    # El HTML puede tener cache-busting o no:
+    #   sin cache:  fetch('sw_data.json')
+    #   con cache:  fetch('sw_data.json?v='+Date.now())
+    # Nota: la comilla de cierre esta ANTES del + en la version con cache.
+    _FETCH_RE = re.compile(
+        r"fetch\("
+        r"(?:\'sw_data\.json\'\)|'sw_data\.json\?v=\'\+Date\.now\(\)\))"
+        r"\.then\(function\(r\)\{return r\.json\(\);\}\)\.then\(function\(d\)\{\n  SW_DATA = d;"
+    )
+    NEW_INLINE = "(function(){\n  var d = " + sw_inline + ";\n  SW_DATA = d;"
     OLD_END = "}).catch(function(){console.warn('sw_data.json no encontrado');});"
-    NEW_END = "})();"
+    NEW_END  = "})();"
 
-    if OLD_FETCH in html:
-        html = html.replace(OLD_FETCH, NEW_INLINE, 1)
+    if _FETCH_RE.search(html):
+        # Lambda evita que re.sub interprete backslashes del JSON como backreferences
+        html = _FETCH_RE.sub(lambda _: NEW_INLINE, html, count=1)
         html = html.replace(OLD_END, NEW_END, 1)
         print("  OK")
     else:
-        print("  ADVERTENCIA: patron fetch no encontrado en el HTML")
+        print("  ADVERTENCIA: patron fetch sw_data.json no encontrado en el HTML")
 else:
     print("  ADVERTENCIA: sw_data.json no encontrado")
 

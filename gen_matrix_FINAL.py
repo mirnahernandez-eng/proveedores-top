@@ -10,8 +10,13 @@ CSV  = r'C:\Users\mmvhern\OneDrive - Walmart Inc\Escritorio\puppy\YMS_TOP\vendor
 OUT  = os.path.join(BASE, 'matrix_FINAL.json')
 
 MESES_PROM = ['Enero','Febrero','Marzo','Abril','Mayo','Junio']
-MESES_ALL  = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio']
-MESES_IND  = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio']
+# Orden fiscal completo, de referencia. MESES_ALL/MESES_IND se recalculan
+# mas abajo, dinamicamente, para incluir solo los meses con datos reales
+# (evita tener que tocar este archivo cada vez que empieza un mes nuevo).
+_MES_ORDER_FULL = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto',
+                    'Septiembre','Octubre','Noviembre','Diciembre']
+MESES_ALL  = list(_MES_ORDER_FULL)   # placeholder, se recalcula abajo
+MESES_IND  = list(_MES_ORDER_FULL)   # placeholder, se recalcula abajo
 
 VENDOR_DISPLAY = {
     'KIMBERLY CLARK DE MEX SA DE CV':                 'KIMBERLY CLARK DE MEX SA B CV',
@@ -117,6 +122,19 @@ with open(CSV, encoding='utf-8-sig') as f:
         raw[disp][cedis][mes]['wl']   += llegada * c
         raw[disp][cedis][mes]['wr']   += recibo  * c
         raw[disp][cedis][mes]['wsal'] += salida  * c
+
+# Recalcular MESES_ALL/MESES_IND: solo meses con al menos una cita real,
+# manteniendo el orden fiscal (Enero..Diciembre). Asi el filtro de mes del
+# tablero nunca muestra meses vacios ni se queda corto cuando empieza uno
+# nuevo -- se ajusta solo con cada actualizacion de datos.
+_meses_con_datos = {
+    mes for vendor_d in raw.values()
+    for cedis_d in vendor_d.values()
+    for mes, vals in cedis_d.items()
+    if vals['c'] > 0
+}
+MESES_ALL = [m for m in _MES_ORDER_FULL if m in _meses_con_datos]
+MESES_IND = MESES_ALL
 
 def _wavg(vendors, cedis_list, mes_list, field='ws'):
     """Promedio simple de todas las citas individuales.

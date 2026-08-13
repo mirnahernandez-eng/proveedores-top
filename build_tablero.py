@@ -113,6 +113,10 @@ select { border:1px solid #cbd5e1; border-radius:6px;
   </button>
   <div id="updateStatus" class="flex items-center gap-2 text-xs text-slate-600">
     <span id="statusMsg">Listo</span>
+    <a id="puppyLink" href="#" target="_blank"
+       style="display:none;font-weight:600;color:#2563eb;text-decoration:underline;">
+      Ver en Puppy Pages
+    </a>
     <div id="spinnerBox" style="display:none">
       <svg class="animate-spin h-4 w-4 text-blue-600" viewBox="0 0 24 24" fill="none">
         <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31.4" stroke-dashoffset="10"/>
@@ -167,13 +171,7 @@ select { border:1px solid #cbd5e1; border-radius:6px;
   <div class="flex items-center gap-2">
     <label class="text-sm font-semibold text-slate-600">Mes:</label>
     <select id="mesSel" onchange="renderAll()" class="text-sm border border-slate-300 rounded-md px-2 py-1">
-      <option value="Enero">Enero</option>
-      <option value="Febrero">Febrero</option>
-      <option value="Marzo">Marzo</option>
-      <option value="Abril">Abril</option>
-      <option value="Mayo">Mayo</option>
-      <option value="Junio">Junio</option>
-      <option value="Julio">Julio</option>
+MES_OPTIONS_PH
       <option value="ytd" selected>YTD</option>
     </select>
   </div>
@@ -578,9 +576,9 @@ var REGIONS_PSAMS = [{n:"NORTE",l:["MTY"]},{n:"CENTRO",l:["SMO"]},{n:"SUR",l:["G
 var SW_DATA = null;
 var gSelSW  = [];
 
-var ALL_PER = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","ytd"];
-var PER_LBL = {Enero:"Enero",Febrero:"Febrero",Marzo:"Marzo",Abril:"Abril",Mayo:"Mayo",Junio:"Junio",Julio:"Julio",ytd:"YTD"};
-var PER_BG  = {Enero:"#1d4ed8",Febrero:"#1d4ed8",Marzo:"#1d4ed8",Abril:"#1d4ed8",Mayo:"#1d4ed8",Junio:"#1d4ed8",Julio:"#d97706",ytd:"#065f46"};
+var ALL_PER = ALL_PER_PH;
+var PER_LBL = PER_LBL_PH;
+var PER_BG  = PER_BG_PH;
 var REG_BG  = {NORTE:"#1d4ed8",CENTRO:"#6d28d9",SUR:"#065f46"};
 
 var gChartInstances = [];  // array: un chart por CD seleccionado (o 1 si no hay filtro)
@@ -1490,6 +1488,13 @@ function pollEstado() {
 function mostrarEstado(e) {
   document.getElementById('statusMsg').textContent = e.msg;
   document.getElementById('progressFill').style.width = (e.pct||0) + '%';
+  var link = document.getElementById('puppyLink');
+  if (e.puppy_url) {
+    link.href = e.puppy_url;
+    link.style.display = 'inline';
+  } else {
+    link.style.display = 'none';
+  }
   if (!e.running) {
     document.getElementById('btnUpdate').disabled = false;
     document.getElementById('spinnerBox').style.display = 'none';
@@ -1539,8 +1544,22 @@ renderAll();
 
 
 def build_html(final, perec, last_date=""):
-    # Inyectar fecha al HTML estático antes de incrustar scripts
-    head_with_date = HEAD.replace("DATA_LAST_DATE_PH", last_date)
+    # Meses con datos reales (fuente unica: final['meses'], ya calculado
+    # dinamicamente en gen_matrix_FINAL.py) -- nunca hardcodear aqui, para
+    # que el filtro de mes nunca muestre meses vacios ni se quede corto.
+    meses = final.get('meses', [])
+    mes_options_html = "\n".join(f'      <option value="{m}">{m}</option>' for m in meses)
+    all_per_list = meses + ['ytd']
+    per_lbl = {m: m for m in meses}
+    per_lbl['ytd'] = 'YTD'
+    per_bg = {m: '#1d4ed8' for m in meses}
+    if meses:
+        per_bg[meses[-1]] = '#d97706'   # resalta el mes en curso (el mas reciente con datos)
+    per_bg['ytd'] = '#065f46'
+
+    # Inyectar fecha y meses al HTML estático antes de incrustar scripts
+    head_with_date = (HEAD.replace("DATA_LAST_DATE_PH", last_date)
+                           .replace("MES_OPTIONS_PH", mes_options_html))
     parts = [head_with_date]
 
     # ── Embedded data ──
@@ -1567,7 +1586,11 @@ def build_html(final, perec, last_date=""):
     parts.append(f"var DISPLAY_ORDER   = {j(final.get('display_order', []))};\n")
     parts.append(f"var PEREC_ORDER     = {j(perec.get('display_order', []))};\n")
     parts.append(OBJECTIVES_JS)
-    parts.append(LOGIC_JS)
+    logic_js_filled = (LOGIC_JS
+                        .replace("ALL_PER_PH", j(all_per_list))
+                        .replace("PER_LBL_PH", j(per_lbl))
+                        .replace("PER_BG_PH", j(per_bg)))
+    parts.append(logic_js_filled)
 
     return "".join(parts)
 

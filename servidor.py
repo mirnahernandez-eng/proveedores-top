@@ -21,7 +21,7 @@ BQ_TABLE = "wmt-intl-supplychain-gcp-prod.MR101_WM_AD_HOC.SCH_YMS_SEMANAL"
 app = FastAPI(title="Tablero LOS Proveedores TOP 2026")
 
 # ── Estado global del proceso de actualización ──────────────────────────────
-_estado = {"running": False, "msg": "Listo", "ok": True, "pct": 0}
+_estado = {"running": False, "msg": "Listo", "ok": True, "pct": 0, "puppy_url": None}
 
 # ── Helpers de normalización (idénticos a build_sw_data.py) ─────────────────
 def _ascii(s: str) -> str:
@@ -420,14 +420,75 @@ def pipeline_actualizar(fecha_inicio: str, fecha_fin: str):
         if result2.returncode != 0:
             raise RuntimeError(f"Error build_tablero: {result2.stderr[:300]}")
 
+        # ── Generar standalone + publicar a Puppy Pages ─────────────────────
+        _estado["msg"] = "Generando versión standalone para Puppy Pages..."
+        _estado["pct"] = 95
+        result3 = subprocess.run(
+            [sys.executable, str(BASE / "make_standalone.py")],
+            capture_output=True, text=True, cwd=str(BASE)
+        )
+        if result3.returncode != 0:
+            # No es fatal — el tablero local ya está actualizado
+            _estado = {
+                "running": False,
+                "msg": f" Actualización completa pero standalone falló: {result3.stderr[:200]}",
+                "ok": True,
+                "pct": 100,
+                "puppy_url": None,
+            }
+            return
+
+        _estado["msg"] = "Publicando en Puppy Pages..."
+        try:
+            puppy_url = publicar_a_puppy_pages()
+        except Exception as pub_err:
+            puppy_url = None
+            _estado["msg"] = f" Actualización completa pero no se pudo publicar: {str(pub_err)[:200]}"
+
         _estado = {
             "running": False,
-            "msg": f" Actualización completa — {len(df_bq):,} registros procesados ({fecha_inicio} → {fecha_fin})",
+            "msg": (
+                f" Actualización completa — {len(df_bq):,} registros procesados ({fecha_inicio} → {fecha_fin}). "
+                + (f"Publicado en Puppy Pages " if puppy_url else "Publicación falló ")
+            ),
             "ok": True,
-            "pct": 100
+            "pct": 100,
+            "puppy_url": puppy_url,
         }
     except Exception as e:
-        _estado = {"running": False, "msg": f" Error: {str(e)[:300]}", "ok": False, "pct": 0}
+        _estado = {"running": False, "msg": f" Error: {str(e)[:300]}", "ok": False, "pct": 0, "puppy_url": None}
+
+# ── Publicar a Puppy Pages ──────────────────────────────────────────────────
+PUPPY_API  = "https://puppy.walmart.com/api/sharing"
+PUPPY_PAGE = "tablero-yms-top-2026"
+
+def _leer_token() -> str:
+    import configparser
+    cfg = configparser.ConfigParser()
+    cfg.read(Path.home() / ".code_puppy" / "puppy.cfg")
+    return cfg["puppy"]["puppy_token"]
+
+def publicar_a_puppy_pages() -> str:
+    """Sube tablero_standalone.html a Puppy Pages. Devuelve la URL pública."""
+    import requests
+    standalone = BASE / "tablero_standalone.html"
+    if not standalone.exists():
+        raise FileNotFoundError("tablero_standalone.html no encontrado — corre make_standalone.py primero")
+    html = standalone.read_text(encoding="utf-8")
+    token = _leer_token()
+    resp = requests.post(
+        f"{PUPPY_API}/pages",
+        json={
+            "name":        PUPPY_PAGE,
+            "business":    "general",
+            "html":        html,
+            "description": "Tablero LOS Proveedores TOP 2026",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=120,
+    )
+    resp.raise_for_status()
+    return resp.json().get("url", f"https://puppy.walmart.com/sharing/mmvhern/{PUPPY_PAGE}")
 
 # ── Rutas ────────────────────────────────────────────────────────────────────
 class ActualizarRequest(BaseModel):
