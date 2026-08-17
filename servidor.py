@@ -354,6 +354,81 @@ def generar_csv_mensual(df: pd.DataFrame, kw_by_cat: dict):
 
     return len(grp), int(grp["TOTAL_CITAS"].sum())
 
+# ── Vendors de Perecederos (top 5) y sus variantes de nombre en BQ ──────────
+PEREC_VENDOR_PREFIX = {
+    "DRISCOLL":                    "DRISCOLL S OPERACIONES SA C",
+    "PILGRIMS PRIDE":              "PILGRIMS PRIDE S DE RL DE C",
+    "LANDEROS PALAZUELOS":         "LANDEROS PALAZUELOS EDUARDO",
+    "MJ INTERNATIONAL":            "MJ INTERNATIONAL MARKETIN S",
+    "FRUTAS Y LEGUMBRES ALPHA":    "FRUTAS Y LEGUMBRES ALPHA SA CV",
+}
+
+def _perec_display(vendor_raw: str):
+    v = str(vendor_raw or "").upper().strip()
+    for pre, disp in PEREC_VENDOR_PREFIX.items():
+        if v.startswith(pre):
+            return disp
+    return None
+
+def generar_csv_perec(df: pd.DataFrame):
+    """Genera vendor_cedis_mes_PEREC.csv (Top 5 proveedores de Perecederos)
+    desde el MISMO DataFrame fresco de BigQuery -- estas filas normalmente se
+    descartan en generar_csv_mensual() porque NOMBRE_CEDIS contiene
+    'perecedero' (ver get_cat). Aqui las rescatamos aparte."""
+    d = df.copy()
+
+    if "MES" in d.columns and d["MES"].notna().any():
+        d["_mes"] = d["MES"].astype(str).str.strip()
+    else:
+        d["ARRIVAL_DATE"] = pd.to_datetime(d["ARRIVAL_DATE"], errors="coerce")
+        d["_mes"] = d["ARRIVAL_DATE"].dt.month.map(MES_NUM_MAP)
+
+    d["_disp"] = d["VENDOR"].apply(_perec_display)
+    d = d[d["_disp"].notna()].copy()
+    d = d[d["NOMBRE_CEDIS"].apply(lambda n: "perecedero" in _ascii(n))].copy()
+
+    TIPOS_OK = {"PROVEEDOR", "CITA NUEVA"}
+    if "TIPO_CITA" in d.columns:
+        d = d[d["TIPO_CITA"].str.upper().str.strip().isin(TIPOS_OK)].copy()
+    if "CITAS_CORRECTAS" in d.columns:
+        d = d[pd.to_numeric(d["CITAS_CORRECTAS"], errors="coerce") == 1].copy()
+    d = d[d["formula_2"] > 0].copy()
+
+    for col_orig, col_bq in [("ABRIR", "ABRIR_CORTINA"), ("CERRAR", "CERRAR_CORTINA"), ("PAPER", "PAPER_W")]:
+        if col_orig not in d.columns and col_bq in d.columns:
+            d[col_orig] = pd.to_numeric(d[col_bq], errors="coerce").fillna(0)
+        elif col_orig not in d.columns:
+            d[col_orig] = 0.0
+    for col in ["LLEGADA_A_TRAFICO", "ABRIR", "CERRAR", "PAPER", "SALIDA_DE_CD"]:
+        d[col] = pd.to_numeric(d[col], errors="coerce").fillna(0) / 60
+
+    if d.empty:
+        grp = pd.DataFrame(columns=["VENDOR", "CEDIS", "MES", "ANIO", "TOTAL_CITAS",
+                                     "LLEGADA", "CERRAR", "PAPER", "SALIDA",
+                                     "TOTAL_HRS", "LOS_SUM"])
+    else:
+        d["VENDOR"] = d["_disp"]
+        grp = d.groupby(["VENDOR", "CEDIS", "_mes", "ANIO"], as_index=False).agg(
+            TOTAL_CITAS=("APPOINTMENT_NBR", "count"),
+            LLEGADA=("LLEGADA_A_TRAFICO", "mean"),
+            ABRIR=("ABRIR", "mean"),
+            CERRAR=("CERRAR", "mean"),
+            PAPER=("PAPER", "mean"),
+            SALIDA=("SALIDA_DE_CD", "mean"),
+            TOTAL_HRS=("formula_2", "mean"),
+            LOS_SUM=("formula_2", "sum"),
+        )
+        grp = grp.rename(columns={"_mes": "MES"})
+        for col in ["LLEGADA", "ABRIR", "CERRAR", "PAPER", "SALIDA", "TOTAL_HRS"]:
+            grp[col] = grp[col].round(4)
+
+    for path in [
+        BASE / "bigquery_results" / "vendor_cedis_mes_PEREC.csv",
+    ]:
+        grp.to_csv(path, index=False, encoding="utf-8-sig")
+
+    return len(grp), int(grp["TOTAL_CITAS"].sum())
+
 # ── Pipeline completo de actualización ──────────────────────────────────────
 def pipeline_actualizar(fecha_inicio: str, fecha_fin: str):
     global _estado
@@ -388,7 +463,9 @@ def pipeline_actualizar(fecha_inicio: str, fecha_fin: str):
         _estado["pct"] = 65
 
         filas_csv, citas_csv = generar_csv_mensual(df_bq, kw_by_cat)
-        _estado["msg"] = f"CSV mensual: {filas_csv} filas / {citas_csv:,} citas. Agregando por SW..."
+        filas_perec, citas_perec = generar_csv_perec(df_bq)
+        _estado["msg"] = (f"CSV mensual: {filas_csv} filas / {citas_csv:,} citas. "
+                           f"Perecederos: {filas_perec} filas / {citas_perec:,} citas. Agregando por SW...")
         _estado["pct"] = 70
 
         sw_data = agregar_sw(df_bq, kw_by_cat, fecha_fin=fecha_fin)
@@ -411,6 +488,14 @@ def pipeline_actualizar(fecha_inicio: str, fecha_fin: str):
         )
         if result.returncode != 0:
             _estado["msg"] = f"Advertencia gen_matrix: {result.stderr[:200]}"
+        _estado["pct"] = 90
+
+        result_perec = subprocess.run(
+            [sys.executable, str(BASE / "gen_matrix_perec.py")],
+            capture_output=True, text=True, cwd=str(BASE)
+        )
+        if result_perec.returncode != 0:
+            _estado["msg"] = f"Advertencia gen_matrix_perec: {result_perec.stderr[:200]}"
         _estado["pct"] = 92
 
         result2 = subprocess.run(
